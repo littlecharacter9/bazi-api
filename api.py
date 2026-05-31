@@ -13,7 +13,7 @@ from openai import OpenAI
 from lunar_python import Solar
 
 # ================== 配置 ==================
-API_KEY = "sk-70db94f98a2d463da58e225244b0c0bb"
+API_KEY = "sk-8b2f8551ba5a44ae91bedb23800bd8be"
 
 # ================== 请求模型 ==================
 class BaziRequest(BaseModel):
