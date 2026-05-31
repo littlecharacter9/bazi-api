@@ -105,7 +105,22 @@ def get_prompt(bazi_str, gender, has_hour, module, year, liunian):
 
 # ================== API 服务 ==================
 app = FastAPI(title="AI命理助手API", version="1.0.0")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+# CORS 配置 - 修复跨域问题
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "https://bazi-web.vercel.app",
+        "https://bazi-web.vercel.app/",
+        "https://bazi-web.vercel.app",
+        "http://localhost:3000",
+        "http://localhost:8080",
+        "*"  # 开发期间使用 *，生产环境建议替换为具体域名
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 client = OpenAI(api_key=API_KEY, base_url="https://api.deepseek.com")
 
@@ -120,6 +135,11 @@ def call_ai(prompt):
 @app.get("/")
 def root():
     return {"message": "AI命理助手API运行中", "version": "1.0.0"}
+
+@app.options("/analyze")
+def options_analyze():
+    """处理预检请求"""
+    return {"message": "OK"}
 
 @app.post("/analyze")
 def analyze(request: BaziRequest):
