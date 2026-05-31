@@ -111,11 +111,9 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "https://bazi-web.vercel.app",
-        "https://bazi-web.vercel.app/",
-        "https://bazi-web.vercel.app",
         "http://localhost:3000",
         "http://localhost:8080",
-        "*"  # 开发期间使用 *，生产环境建议替换为具体域名
+        "*"  # 一个星号，不是两个
     ],
     allow_credentials=True,
     allow_methods=["*"],
