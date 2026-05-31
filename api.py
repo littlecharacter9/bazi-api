@@ -13,10 +13,9 @@ from openai import OpenAI
 from lunar_python import Solar
 
 # ================== 配置 ==================
-API_KEY = "sk-8b2f8551ba5a44ae91bedb23800bd8be"  # 临时写死，测试用
-# API_KEY = os.getenv("DEEPSEEK_API_KEY")
-# if not API_KEY:
-#     raise ValueError("请设置环境变量 DEEPSEEK_API_KEY")
+API_KEY = os.getenv("DEEPSEEK_API_KEY")
+if not API_KEY:
+    raise ValueError("请设置环境变量 DEEPSEEK_API_KEY")
 
 # ================== 请求模型 ==================
 class BaziRequest(BaseModel):
@@ -100,14 +99,30 @@ def get_prompt(bazi_str, gender, has_hour, module, year, liunian):
         'career': f"八字：{bazi_str}，性别：{gender}{hour_warning}\n请分析事业运势：格局特点、适合行业、发展建议。仅供参考。",
         'wealth': f"八字：{bazi_str}，性别：{gender}{hour_warning}\n请分析财运运势：财富等级、求财方式、财运时机。仅供参考。",
         'marriage': f"八字：{bazi_str}，性别：{gender}{hour_warning}\n请分析婚姻运势：配偶特征、婚姻早晚、相处建议。仅供参考。",
-        'verify': f"八字：{bazi_str}，性别：{gender}{hour_warning}\n请根据八字推断：①环境方位 ②六亲情况 ③过去经历 ④性格特征"
+        'verify': f"""八字：{bazi_str}，性别：{gender}{hour_warning}
+
+请根据八字推断以下内容：
+
+【环境方位】
+家里或家外的XX方向有什么特征物品/环境，请给出分析理由。
+
+【六亲情况】
+与哪位亲人的关系如何，或该亲人的性格特征，请给出分析理由。
+
+【过去经历】
+列举两个最有把握的年份发生过的事情，请给出分析理由。
+
+【性格特征】
+列出2-3个明显的性格特点，请给出分析理由。
+
+输出完毕后请说：以上是我的初步推断，请判断是否准确？如果哪一条不准确，请告诉我具体是哪一条、哪里不对。"""
     }
     return templates.get(module, templates['overview'])
 
 # ================== API 服务 ==================
 app = FastAPI(title="AI命理助手API", version="1.0.0")
 
-# CORS 配置 - 允许所有来源（解决跨域问题）
+# CORS 配置
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
