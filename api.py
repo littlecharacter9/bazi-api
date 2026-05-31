@@ -9,9 +9,7 @@ from openai import OpenAI
 from lunar_python import Solar
 
 # ================== 配置 ==================
-API_KEY = os.getenv("DEEPSEEK_API_KEY")
-if not API_KEY:
-    raise ValueError("请设置环境变量 DEEPSEEK_API_KEY")
+API_KEY = "sk-8b2f8551ba5a44ae91bedb23800bd8be"
 
 # ================== 请求模型 ==================
 class BaziRequest(BaseModel):
