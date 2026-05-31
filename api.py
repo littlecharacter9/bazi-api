@@ -1,10 +1,15 @@
 # -*- coding: utf-8 -*-
+"""
+AI命理助手 - API 服务
+适配 Railway 部署
+"""
 import os
 import re
 from datetime import datetime
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from typing import Optional, List, Dict, Any
 from openai import OpenAI
 from lunar_python import Solar
 
@@ -15,6 +20,15 @@ API_KEY = "sk-8b2f8551ba5a44ae91bedb23800bd8be"
 class BaziRequest(BaseModel):
     birth: str
     module: str = "all"
+
+class FeedbackItem(BaseModel):
+    section: str
+    content: str
+    feedback: str
+
+class VerifyAdjustRequest(BaseModel):
+    birth: str
+    feedback_items: List[FeedbackItem]
 
 # ================== 基础函数 ==================
 def parse_gender(user_input):
@@ -98,7 +112,7 @@ def get_prompt(bazi_str, gender, has_hour, module, year, liunian):
 请根据八字推断以下内容：
 
 【环境方位】
-家里或家外的XX方向有什么特征物品/环境，请给出分析理由。
+家里或家外的XX方向明有什么特征物品/环境，请给出分析理由。注意确指出家里还是家外。
 
 【六亲情况】
 与哪位亲人的关系如何，或该亲人的性格特征，请给出分析理由。
@@ -113,10 +127,28 @@ def get_prompt(bazi_str, gender, has_hour, module, year, liunian):
     }
     return templates.get(module, templates['overview'])
 
+def get_adjust_prompt(bazi_str, gender, section, original_content, user_feedback):
+    """生成单条调整的提示词"""
+    hour_warning = get_hour_warning(True)
+    return f"""八字：{bazi_str}，性别：{gender}{hour_warning}
+
+请根据以下用户反馈，重新生成【{section}】的推断内容：
+
+用户反馈的原推断：{original_content}
+用户的实际情况：{user_feedback}
+
+请根据用户的实际情况，重新生成一段准确的推断。要求：
+1. 只输出该条推断的内容，不要输出其他部分
+2. 根据用户的反馈调整分析方向，使推断更贴近用户描述的实际
+3. 保持专业但易懂的语气
+4. 格式保持与原来类似，包含具体推断和分析理由
+
+请直接输出重新生成后的【{section}】内容："""
+
 # ================== API 服务 ==================
 app = FastAPI(title="AI命理助手API", version="1.0.0")
 
-# CORS 配置 - 放在最前面确保生效
+# CORS 配置
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -139,13 +171,16 @@ def call_ai(prompt):
 def root():
     return {"message": "AI命理助手API运行中", "version": "1.0.0"}
 
-# 处理预检请求（OPTIONS）
 @app.options("/analyze")
 def options_analyze():
     return {"message": "OK"}
 
 @app.options("/verify")
 def options_verify():
+    return {"message": "OK"}
+
+@app.options("/verify_adjust")
+def options_verify_adjust():
     return {"message": "OK"}
 
 @app.post("/analyze")
@@ -183,6 +218,53 @@ def verify(request: BaziRequest):
         content = call_ai(prompt)
         
         return {"success": True, "data": {"bazi": bazi_str, "verify": content}}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+@app.post("/verify_adjust")
+def verify_adjust(request: VerifyAdjustRequest):
+    """
+    根据用户反馈重新生成不准确的验证条目
+    """
+    try:
+        parsed = parse_birth_and_gender(request.birth)
+        if not parsed:
+            return {"success": False, "error": "无法解析生辰"}
+        
+        year, month, day, hour, gender, has_hour = parsed
+        bazi = get_bazi(year, month, day, hour, gender)
+        bazi_str = f"{bazi['年柱']} {bazi['月柱']} {bazi['日柱']} {bazi['时柱']}"
+        
+        adjusted_items = []
+        
+        for fb in request.feedback_items:
+            # 构建重新生成的提示词
+            prompt = get_adjust_prompt(
+                bazi_str, 
+                bazi['性别'], 
+                fb.section, 
+                fb.content, 
+                fb.feedback
+            )
+            
+            new_content = call_ai(prompt)
+            
+            # 清理内容，去掉可能的多余标记
+            new_content = new_content.strip()
+            # 如果返回的内容包含了章节标题，去掉它
+            if new_content.startswith(f"【{fb.section}】"):
+                new_content = new_content.replace(f"【{fb.section}】", "").strip()
+            elif new_content.startswith(f"{fb.section}"):
+                new_content = new_content.replace(f"{fb.section}", "").strip()
+            
+            adjusted_items.append({
+                "section": fb.section,
+                "original_content": fb.content,
+                "new_content": new_content
+            })
+        
+        return {"success": True, "data": {"adjusted_items": adjusted_items}}
+        
     except Exception as e:
         return {"success": False, "error": str(e)}
 
