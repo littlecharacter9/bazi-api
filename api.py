@@ -106,15 +106,10 @@ def get_prompt(bazi_str, gender, has_hour, module, year, liunian):
 # ================== API 服务 ==================
 app = FastAPI(title="AI命理助手API", version="1.0.0")
 
-# CORS 配置 - 修复跨域问题
+# CORS 配置 - 允许所有来源（解决跨域问题）
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://bazi-web.vercel.app",
-        "http://localhost:3000",
-        "http://localhost:8080",
-        "*"  # 一个星号，不是两个
-    ],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -133,11 +128,6 @@ def call_ai(prompt):
 @app.get("/")
 def root():
     return {"message": "AI命理助手API运行中", "version": "1.0.0"}
-
-@app.options("/analyze")
-def options_analyze():
-    """处理预检请求"""
-    return {"message": "OK"}
 
 @app.post("/analyze")
 def analyze(request: BaziRequest):
@@ -177,7 +167,7 @@ def verify(request: BaziRequest):
     except Exception as e:
         return {"success": False, "error": str(e)}
 
-# ================== 启动服务（适配 Railway）==================
+# ================== 启动服务 ==================
 if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("PORT", 8000))
