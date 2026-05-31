@@ -1,8 +1,4 @@
 # -*- coding: utf-8 -*-
-"""
-AI命理助手 - API 服务
-适配 Railway 部署
-"""
 import os
 import re
 from datetime import datetime
@@ -122,7 +118,7 @@ def get_prompt(bazi_str, gender, has_hour, module, year, liunian):
 # ================== API 服务 ==================
 app = FastAPI(title="AI命理助手API", version="1.0.0")
 
-# CORS 配置
+# CORS 配置 - 放在最前面确保生效
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -144,6 +140,15 @@ def call_ai(prompt):
 @app.get("/")
 def root():
     return {"message": "AI命理助手API运行中", "version": "1.0.0"}
+
+# 处理预检请求（OPTIONS）
+@app.options("/analyze")
+def options_analyze():
+    return {"message": "OK"}
+
+@app.options("/verify")
+def options_verify():
+    return {"message": "OK"}
 
 @app.post("/analyze")
 def analyze(request: BaziRequest):
