@@ -151,10 +151,12 @@ app = FastAPI(title="AI命理助手API", version="1.0.0")
 # CORS 配置
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
+    allow_origins=["https://www.bajiemingli.top", "https://bajiemingli.top"],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
+    max_age=600,
 )
 
 client = OpenAI(api_key=API_KEY, base_url="https://api.deepseek.com")
