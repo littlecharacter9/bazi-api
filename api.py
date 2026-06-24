@@ -12,9 +12,10 @@ from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 from openai import OpenAI
 from lunar_python import Solar
+from deepseek import router as deepseek_router
 
-# ================== 配置 ==================
-API_KEY = "sk-8b2f8551ba5a44ae91bedb23800bd8be"
+# 然后在 app 初始化后注册
+app.include_router(deepseek_router, prefix="/api")
 
 # ================== 请求模型 ==================
 class BaziRequest(BaseModel):
