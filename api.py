@@ -12,10 +12,6 @@ from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 from openai import OpenAI
 from lunar_python import Solar
-from deepseek import router as deepseek_router
-
-# 然后在 app 初始化后注册
-app.include_router(deepseek_router, prefix="/api")
 
 # ================== 请求模型 ==================
 class BaziRequest(BaseModel):
@@ -160,9 +156,17 @@ app.add_middleware(
     max_age=600,
 )
 
+# ===== 从环境变量读取 API Key（安全！） =====
+API_KEY = os.environ.get("DEEPSEEK_API_KEY")
+if not API_KEY:
+    print("⚠️ 警告: DEEPSEEK_API_KEY 环境变量未设置")
+
 client = OpenAI(api_key=API_KEY, base_url="https://api.deepseek.com")
 
 def call_ai(prompt):
+    """调用 DeepSeek API"""
+    if not API_KEY:
+        return "❌ API Key 未配置，请在 Railway 环境变量中设置 DEEPSEEK_API_KEY"
     response = client.chat.completions.create(
         model="deepseek-chat",
         messages=[{"role": "user", "content": prompt}],
@@ -254,7 +258,6 @@ def verify_adjust(request: VerifyAdjustRequest):
             
             # 清理内容，去掉可能的多余标记
             new_content = new_content.strip()
-            # 如果返回的内容包含了章节标题，去掉它
             if new_content.startswith(f"【{fb.section}】"):
                 new_content = new_content.replace(f"【{fb.section}】", "").strip()
             elif new_content.startswith(f"{fb.section}"):
