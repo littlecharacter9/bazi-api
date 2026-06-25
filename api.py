@@ -122,7 +122,7 @@ def get_prompt(bazi_str, gender, has_hour, module, year, liunian):
     
     # ===== 2. 输出格式模板（纯结构） =====
     format_templates = {
-        'overview': """总体结论：你的八字属于XX格局，日主偏X。
+        'overview': """总体结论：八字XX，喜XX，忌XX。
 
 一、日主强弱
    - XX：XX，原因(此条阐述得令与否)
