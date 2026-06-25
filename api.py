@@ -13,6 +13,22 @@ from typing import Optional, List, Dict, Any
 from openai import OpenAI
 from lunar_python import Solar
 
+# ================== 读取规则文件 ==================
+def load_rules():
+    """从 rules.txt 读取八字推理规则"""
+    rules_path = os.path.join(os.path.dirname(__file__), "rules.txt")
+    try:
+        with open(rules_path, "r", encoding="utf-8") as f:
+            content = f.read()
+            print(f"✅ 规则文件加载成功，共 {len(content)} 字符")
+            return content
+    except FileNotFoundError:
+        print("⚠️ 警告: rules.txt 文件未找到，使用默认规则")
+        return ""
+    except Exception as e:
+        print(f"⚠️ 读取 rules.txt 失败: {e}")
+        return ""
+
 # ================== 请求模型 ==================
 class BaziRequest(BaseModel):
     birth: str
@@ -96,32 +112,163 @@ def get_hour_warning(has_hour):
         return "\n⚠️ 未提供时辰，准确率约30%-40%"
     return ""
 
+# ================== 构建提示词 ==================
 def get_prompt(bazi_str, gender, has_hour, module, year, liunian):
     hour_warning = get_hour_warning(has_hour)
+    
+    # 加载规则库
+    rules = load_rules()
+    rules_section = f"\n\n【推理规则库 - 请严格按以下规则推理】\n{rules}\n" if rules else ""
+    
+    # 统一的格式要求
+    format_rule = """
+【输出格式要求】
+1. 语言朴实直白，禁止使用诗句、古文、成语堆砌，用日常语表达。
+2. 采用总分结构：先给出总体结论（一句话概括），再分条详细说明。
+3. 分条时用数字编号（1. 2. 3. ...），每条内容简洁有力。
+4. 每条分析必须包含：结论 + 简要理由（为什么这样判断）。
+5. 不要使用"您""尔"等敬语，直接说"你"即可。
+6. 结尾不要写诗，用一句朴实的总结或建议收尾。
+"""
+    
     templates = {
-        'overview': f"八字：{bazi_str}，性别：{gender}{hour_warning}\n请进行八字综合分析：一、日元强弱 二、喜用忌凶五行 三、喜用忌凶颜色 四、喜用忌凶数字 五、喜用忌凶方位。仅供参考。",
-        'liunian': f"八字：{bazi_str}，性别：{gender}{hour_warning}\n请分析{year}年（{liunian}年）及未来两年的流年运势。仅供参考。",
-        'career': f"八字：{bazi_str}，性别：{gender}{hour_warning}\n请分析事业运势：格局特点、适合行业、发展建议。仅供参考。",
-        'wealth': f"八字：{bazi_str}，性别：{gender}{hour_warning}\n请分析财运运势：财富等级、求财方式、财运时机。仅供参考。",
-        'marriage': f"八字：{bazi_str}，性别：{gender}{hour_warning}\n请分析婚姻运势：配偶特征、婚姻早晚、相处建议。仅供参考。",
-        'verify': f"""八字：{bazi_str}，性别：{gender}{hour_warning}
+        'overview': f"""八字：{bazi_str}，性别：{gender}{hour_warning}{rules_section}
 
-请根据八字推断以下内容：
+请对八字进行综合分析。
 
-【环境方位】
-家里或家外的XX方向明有什么特征物品/环境，请给出分析理由。注意确指出家里还是家外。
+{format_rule}
 
-【六亲情况】
-与哪位亲人的关系如何，或该亲人的性格特征，请给出分析理由。
+分析内容：
+一、日元强弱：判断日主是旺是弱，说明依据。
+二、喜用忌凶五行：哪些五行对你有利，哪些不利。
+三、颜色建议：有利的颜色和不利的颜色。
+四、数字建议：有利的数字。
+五、方位建议：有利的方位。
 
-【过去经历】
-列举两个最有把握的年份发生过的事情，请给出分析理由。
+输出格式示例：
+总体结论：你的八字属于XX格局，日主偏X。
 
-【性格特征】
-列出2-3个明显的性格特点，请给出分析理由。
+1. 日主强弱：偏X。因为XX原因，所以XX。
+2. 喜用五行：X、X、X对你有利，X、X对你不利。
+3. 颜色建议：多穿X色，少用X色。
+4. 数字建议：X、X、X是你的幸运数字。
+5. 方位建议：去X方发展对你有利。
 
-输出完毕后请说：以上是我的初步推断，请判断是否准确？如果哪一条不准确，请告诉我具体是哪一条、哪里不对。"""
+总结：...（一句话）""",
+
+        'liunian': f"""八字：{bazi_str}，性别：{gender}{hour_warning}{rules_section}
+
+请分析{year}年（{liunian}年）及未来两年的流年运势。
+
+{format_rule}
+
+分析内容：
+1. 当年整体运势（{year}年）
+2. 事业方面
+3. 财运方面
+4. 感情方面（如适用）
+5. 健康方面（如适用）
+6. 后两年简单展望
+
+输出格式示例：
+总体结论：{year}年你的运势整体偏X。
+
+1. 整体运势：X年对你来说是XX的一年。因为XX，所以XX。
+2. 事业方面：工作上XX。建议XX。
+3. 财运方面：收入XX。建议XX。
+4. 感情方面：感情上XX。建议XX。
+5. 健康方面：身体XX。注意XX。
+6. 后两年：{year+1}年XX，{year+2}年XX。
+
+总结：...（一句话）""",
+
+        'career': f"""八字：{bazi_str}，性别：{gender}{hour_warning}{rules_section}
+
+请分析事业运势。
+
+{format_rule}
+
+分析内容：
+1. 事业格局：整体事业特点
+2. 适合行业：哪些行业适合你
+3. 工作建议：怎么做能更好
+4. 发展时机：什么时候有机会
+
+输出格式示例：
+总体结论：你的事业格局偏X，适合X方向。
+
+1. 事业格局：你适合XX。因为八字中XX，所以XX。
+2. 适合行业：推荐你做XX、XX、XX。因为这些行业跟你的八字比较合。
+3. 工作建议：建议你XX。理由是XX。
+4. 发展时机：XX年、XX年机会比较好。
+
+总结：...（一句话）""",
+
+        'wealth': f"""八字：{bazi_str}，性别：{gender}{hour_warning}{rules_section}
+
+请分析财运运势。
+
+{format_rule}
+
+分析内容：
+1. 财富等级：整体财运水平
+2. 求财方式：适合怎么赚钱
+3. 财运时机：什么时候财运好
+4. 守财建议：怎么把钱留住
+
+输出格式示例：
+总体结论：你的财运整体偏X。
+
+1. 财富等级：你属于XX水平。因为XX，所以XX。
+2. 求财方式：你适合XX方式赚钱。理由是XX。
+3. 财运时机：XX年、XX年财运不错。
+4. 守财建议：建议你XX。
+
+总结：...（一句话）""",
+
+        'marriage': f"""八字：{bazi_str}，性别：{gender}{hour_warning}{rules_section}
+
+请分析婚姻运势。
+
+{format_rule}
+
+分析内容：
+1. 婚姻早晚：什么时候结婚比较合适
+2. 配偶特征：什么样的人适合你
+3. 相处建议：怎么相处更和谐
+
+输出格式示例：
+总体结论：你的婚姻运势偏X。
+
+1. 婚姻早晚：你适合XX岁左右结婚。因为XX，所以XX。
+2. 配偶特征：适合找XX类型的人。因为八字中XX，所以XX。
+3. 相处建议：建议你XX。
+
+总结：...（一句话）""",
+
+        'verify': f"""八字：{bazi_str}，性别：{gender}{hour_warning}{rules_section}
+
+请根据八字推断以下内容。
+
+{format_rule}
+
+推断内容：
+1. 环境方位：家里或家外哪个方向有什么特征物品/环境
+2. 六亲情况：和哪位亲人关系怎样，或亲人的性格特征
+3. 过去经历：列举两个最有把握的年份发生过的事
+4. 性格特征：2-3个明显的性格特点
+
+输出格式示例：
+总体结论：你的八字有一些明显的特征指向以下情况。
+
+1. 环境方位：你家X方可能有XX。理由：XX。
+2. 六亲情况：你和XX关系XX。理由：XX。
+3. 过去经历：XX年你经历过XX。理由：XX。
+4. 性格特征：你XX。理由：XX。
+
+以上是我的初步推断，请逐条判断是否准确。哪条不对请告诉我哪里不对。"""
     }
+    
     return templates.get(module, templates['overview'])
 
 def get_adjust_prompt(bazi_str, gender, section, original_content, user_feedback):
@@ -134,11 +281,11 @@ def get_adjust_prompt(bazi_str, gender, section, original_content, user_feedback
 用户反馈的原推断：{original_content}
 用户的实际情况：{user_feedback}
 
-请根据用户的实际情况，重新生成一段准确的推断。要求：
+请根据用户的反馈，重新生成推断。要求：
 1. 只输出该条推断的内容，不要输出其他部分
-2. 根据用户的反馈调整分析方向，使推断更贴近用户描述的实际
-3. 保持专业但易懂的语气
-4. 格式保持与原来类似，包含具体推断和分析理由
+2. 判断用户反馈事情性质是否符合八字情况(避免性质相同但表现形式不同)，相同则为用户重新解释符合八字情况不同，不同则重新生成推断
+3. 格式保持与原来类似，包含具体推断和分析理由
+4. 语言朴实直白，不要用诗句古文
 
 请直接输出重新生成后的【{section}】内容："""
 
@@ -156,7 +303,7 @@ app.add_middleware(
     max_age=600,
 )
 
-# ===== 从环境变量读取 API Key（安全！） =====
+# ===== 从环境变量读取 API Key =====
 API_KEY = os.environ.get("DEEPSEEK_API_KEY")
 if not API_KEY:
     print("⚠️ 警告: DEEPSEEK_API_KEY 环境变量未设置")
@@ -245,7 +392,6 @@ def verify_adjust(request: VerifyAdjustRequest):
         adjusted_items = []
         
         for fb in request.feedback_items:
-            # 构建重新生成的提示词
             prompt = get_adjust_prompt(
                 bazi_str, 
                 bazi['性别'], 
