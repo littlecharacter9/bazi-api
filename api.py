@@ -13,22 +13,6 @@ from typing import Optional, List, Dict, Any
 from openai import OpenAI
 from lunar_python import Solar
 
-# ================== 读取规则文件 ==================
-def load_rules():
-    """从 rules.txt 读取八字推理规则"""
-    rules_path = os.path.join(os.path.dirname(__file__), "rules.txt")
-    try:
-        with open(rules_path, "r", encoding="utf-8") as f:
-            content = f.read()
-            print(f"✅ 规则文件加载成功，共 {len(content)} 字符")
-            return content
-    except FileNotFoundError:
-        print("⚠️ 警告: rules.txt 文件未找到，使用默认规则")
-        return ""
-    except Exception as e:
-        print(f"⚠️ 读取 rules.txt 失败: {e}")
-        return ""
-
 # ================== 请求模型 ==================
 class BaziRequest(BaseModel):
     birth: str
@@ -112,117 +96,33 @@ def get_hour_warning(has_hour):
         return "\n⚠️ 未提供时辰，准确率约30%-40%"
     return ""
 
-# ================== 构建提示词（规则和格式完全分离） ==================
 def get_prompt(bazi_str, gender, has_hour, module, year, liunian):
     hour_warning = get_hour_warning(has_hour)
-    
-    # ===== 1. 规则库（纯推理依据，不输出） =====
-    rules = load_rules()
-    rules_section = f"\n【以下是你分析时需要用到的推理规则，只用于辅助判断，不要输出到最终答案中】\n{rules}\n" if rules else ""
-    
-    # ===== 2. 输出格式模板（纯结构） =====
-    format_templates = {
-        'overview': """总体结论：八字XX，喜XX，忌XX。
+    templates = {
+        'overview': f"八字：{bazi_str}，性别：{gender}{hour_warning}\n请进行八字综合分析：一、日元强弱 二、喜用忌凶五行 三、喜用忌凶颜色 四、喜用忌凶数字 五、喜用忌凶方位。仅供参考。",
+        'liunian': f"八字：{bazi_str}，性别：{gender}{hour_warning}\n请分析{year}年（{liunian}年）及未来两年的流年运势。仅供参考。",
+        'career': f"八字：{bazi_str}，性别：{gender}{hour_warning}\n请分析事业运势：格局特点、适合行业、发展建议。仅供参考。",
+        'wealth': f"八字：{bazi_str}，性别：{gender}{hour_warning}\n请分析财运运势：财富等级、求财方式、财运时机。仅供参考。",
+        'marriage': f"八字：{bazi_str}，性别：{gender}{hour_warning}\n请分析婚姻运势：配偶特征、婚姻早晚、相处建议。仅供参考。",
+        'verify': f"""八字：{bazi_str}，性别：{gender}{hour_warning}
 
-一、日主强弱
-   - XX：XX，原因(此条阐述得令与否)
-   - XX：XX，原因(此条阐述得地与否)
-   - XX：XX，原因(此条阐述得势与否)
-   综合：日主XX，因为XX。
-二、五行喜忌
-   - 喜用五行：X、X、X对你有用，原因
-   - 忌凶五行：X、X对你不利，原因
-三、颜色建议
-   - 喜用：X、X；根据喜用五行对应的颜色，X对应X、X对应X
-   - 忌凶：X、X；根据忌凶五行对应的颜色，X对应X、X对应X
-四、 数字建议
-   - 喜用：X、X；根据喜用五行对应的数字，X对应X、X对应X
-   - 忌凶：X、X；根据忌凶五行对应的数字，X对应X、X对应X
-五、方位建议：
-   - 喜用：X、X；根据喜用五行对应的方位，X对应X、X对应X
-   - 忌凶：X、X；根据忌凶五行对应的方位，X对应X、X对应X
+请根据八字推断以下内容：
 
-总结：XXX。AI生成内容仅供娱乐，理性看待。""",
+【环境方位】
+家里或家外的XX方向明有什么特征物品/环境，请给出分析理由。注意确指出家里还是家外。
 
-        'liunian': """总体结论：{year}年你的运势整体偏X。
+【六亲情况】
+与哪位亲人的关系如何，或该亲人的性格特征，请给出分析理由。
 
-1. 整体运势：X年对你来说是XX的一年。
-2. 事业方面：工作上XX。
-3. 财运方面：收入XX。
-4. 感情方面：感情上XX。
-5. 健康方面：身体XX。
-6. 后两年展望：{year+1}年XX，{year+2}年XX。
+【过去经历】
+列举两个最有把握的年份发生过的事情，请给出分析理由。
 
-总结：一句话总结。AI生成内容仅供娱乐，理性看待。""",
+【性格特征】
+列出2-3个明显的性格特点，请给出分析理由。
 
-        'career': """总体结论：你的事业格局偏X，适合X方向。
-
-1. 事业格局：你属于XX类型。
-2. 适合行业：XX、XX、XX比较适合你。
-3. 工作建议：建议你XX。
-4. 发展时机：XX年、XX年有机会。
-
-总结：一句话总结。AI生成内容仅供娱乐，理性看待。""",
-
-        'wealth': """总体结论：你的财运整体偏X。
-
-1. 财富等级：你属于XX水平。
-2. 求财方式：你适合XX方式赚钱。
-3. 财运时机：XX年、XX年财运不错。
-4. 守财建议：建议你XX。
-
-总结：一句话总结。AI生成内容仅供娱乐，理性看待。""",
-
-        'marriage': """总体结论：你的婚姻运势偏X。
-
-1. 婚姻早晚：你适合XX岁左右结婚。
-2. 配偶特征：适合找XX类型的人。
-3. 相处建议：建议你XX。
-
-总结：一句话总结。AI生成内容仅供娱乐，理性看待。""",
-
-        'verify': """
-一、环境方位
-    - 家内：X方向可能有XX。理由：XX。
-    - 家外：X方向可能有XX。理由：XX。
-二、六亲情况
-    (阐述一下和某个亲人的关系或性格特征)
-三、过去经历(例举两条，以下分两条阐述)
-    - XX年你经历过XX。理由：XX。
-    - XX年你经历过XX。理由：XX。
-四、性格特征(例举2-3条性格特征)
-    - XX：原因
-    - XX：原因
-    - XX：原因
-
-以上是我的初步推断，请逐条判断是否准确。哪条不对请告诉我哪里不对。"""
+输出完毕后请说：以上是我的初步推断，请判断是否准确？如果哪一条不准确，请告诉我具体是哪一条、哪里不对。"""
     }
-    
-    # 获取对应的格式模板
-    format_template = format_templates.get(module, format_templates['overview'])
-    
-    # 如果是流年模块，替换 year 占位符
-    if module == 'liunian':
-        format_template = format_template.replace('{year}', str(year))
-        format_template = format_template.replace('{year+1}', str(year + 1))
-        format_template = format_template.replace('{year+2}', str(year + 2))
-    
-    # ===== 3. 拼接最终提示词 =====
-    base_prompt = f"""八字：{bazi_str}，性别：{gender}{hour_warning}
-
-{rules_section}
-
-【输出格式 - 下面的内容就是你的输出模板，请一字不差地照搬这个结构】
-{format_template}
-
-【填充要求】
-1. 参考示例的格式进行输出，保留整体结构不变，内容可进行适当调整
-2. 内容用朴实直白的语言，不用诗句、古文、成语。
-3. 直接说"你"，不用"您""尔"。
-4. 禁止使用 #、##、###、****、== 等任何 Markdown 符号。
-"""
-    
-    return base_prompt
+    return templates.get(module, templates['overview'])
 
 def get_adjust_prompt(bazi_str, gender, section, original_content, user_feedback):
     """生成单条调整的提示词"""
@@ -234,11 +134,11 @@ def get_adjust_prompt(bazi_str, gender, section, original_content, user_feedback
 用户反馈的原推断：{original_content}
 用户的实际情况：{user_feedback}
 
-请根据用户的反馈，重新生成推断。要求：
+请根据用户的实际情况，重新生成一段准确的推断。要求：
 1. 只输出该条推断的内容，不要输出其他部分
-2. 判断用户反馈事情性质是否符合八字情况(避免性质相同但表现形式不同)，相同则为用户重新解释符合八字情况不同，不同则重新生成推断
-3. 格式保持与原来类似，包含具体推断和分析理由
-4. 语言朴实直白，不要用诗句古文
+2. 根据用户的反馈调整分析方向，使推断更贴近用户描述的实际
+3. 保持专业但易懂的语气
+4. 格式保持与原来类似，包含具体推断和分析理由
 
 请直接输出重新生成后的【{section}】内容："""
 
@@ -256,7 +156,7 @@ app.add_middleware(
     max_age=600,
 )
 
-# ===== 从环境变量读取 API Key =====
+# ===== 从环境变量读取 API Key（安全！） =====
 API_KEY = os.environ.get("DEEPSEEK_API_KEY")
 if not API_KEY:
     print("⚠️ 警告: DEEPSEEK_API_KEY 环境变量未设置")
@@ -345,6 +245,7 @@ def verify_adjust(request: VerifyAdjustRequest):
         adjusted_items = []
         
         for fb in request.feedback_items:
+            # 构建重新生成的提示词
             prompt = get_adjust_prompt(
                 bazi_str, 
                 bazi['性别'], 
