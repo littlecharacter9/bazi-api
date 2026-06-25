@@ -125,9 +125,9 @@ def get_prompt(bazi_str, gender, has_hour, module, year, liunian):
         'overview': """总体结论：你的八字属于XX格局，日主偏X。
 
 一、日主强弱
-   - X得令：XX，原因
-   - X得地：XX，原因
-   - X得势：XX，原因
+   - XX：XX，原因(此条阐述得令与否)
+   - XX：XX，原因(此条阐述得地与否)
+   - XX：XX，原因(此条阐述得势与否)
    综合：日主XX，因为XX。
 二、五行喜忌
    - 喜用五行：X、X、X对你有用，原因
