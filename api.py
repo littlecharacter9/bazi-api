@@ -152,6 +152,7 @@ def get_prompt(bazi_str, gender, has_hour, module, year, liunian):
    - 忌凶：X、X；根据忌凶五行对应的方位，X对应X、X对应X
 
 总结：XXX。
+
 AI生成内容仅供参考"
 
 注意：每一条都要先给结论，再简单解释理由。""",
@@ -180,6 +181,7 @@ AI生成内容仅供参考"
 综合：XX(综合说明该流年整体情况及需要重点关注的方面)
 
 总结：XXX。
+
 AI生成内容仅供参考""",
         
         'career': f"""八字：{bazi_str}，性别：{gender}{hour_warning}
