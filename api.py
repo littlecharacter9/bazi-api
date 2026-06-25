@@ -151,7 +151,8 @@ def get_prompt(bazi_str, gender, has_hour, module, year, liunian):
    - 喜用：X、X；根据喜用五行对应的方位，X对应X、X对应X
    - 忌凶：X、X；根据忌凶五行对应的方位，X对应X、X对应X
 
-总结：XXX。AI生成内容仅供娱乐，理性看待。"
+总结：XXX。
+AI生成内容仅供参考"
 
 注意：每一条都要先给结论，再简单解释理由。""",
         
