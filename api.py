@@ -137,8 +137,7 @@ def get_prompt(bazi_str, gender, has_hour, module, year, liunian):
    - XX：XX，原因(此条阐述得令与否)
    - XX：XX，原因(此条阐述得地与否)
    - XX：XX，原因(此条阐述得势与否)
-   - XX：XX，原因(此条阐述日柱空亡对八字能量影响，无影响则不呈现)
-综合：八字整体得分XX，日主XX，因为XX。
+综合：日主XX，因为XX。
 二、五行喜忌
    - 喜用五行：X、X、X对你有用，原因
    - 忌凶五行：X、X对你不利，原因
