@@ -177,7 +177,7 @@ def get_prompt(bazi_str, gender, has_hour, module, year, liunian):
     - 方位建议：XXX，理由+具体行动(住、行XXX方位内容，例举一两条即可)
 五行总结：XXX
 三、八字格局
-① 正格
+① 正格(此段读取rules中的正格规则)
     - 格局：XX，格局类型+原因
     - 特征：XX，表现/影响(性格、追求，根据规则库内容适当延伸话术)
 ② 偏格：
