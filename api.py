@@ -268,27 +268,39 @@ app.add_middleware(
     max_age=600,
 )
 
-# ===== 从环境变量读取 API Key（安全！） =====
+# ===== 从环境变量读取 API Key =====
 API_KEY = os.environ.get("DEEPSEEK_API_KEY")
 if not API_KEY:
     print("⚠️ 警告: DEEPSEEK_API_KEY 环境变量未设置")
 
-client = OpenAI(api_key=API_KEY, base_url="https://api.deepseek.com")
+# ===== 注意：不在这里初始化 OpenAI 客户端 =====
+# client = OpenAI(api_key=API_KEY, base_url="https://api.deepseek.com")
+# 改为在 call_ai 函数中延迟初始化
 
 def call_ai(prompt):
-    """调用 DeepSeek API"""
-    if not API_KEY:
+    """调用 DeepSeek API（延迟初始化）"""
+    api_key = os.environ.get("DEEPSEEK_API_KEY")
+    if not api_key:
         return "❌ API Key 未配置，请在 Railway 环境变量中设置 DEEPSEEK_API_KEY"
-    response = client.chat.completions.create(
-        model="deepseek-chat",
-        messages=[{"role": "user", "content": prompt}],
-        stream=False
-    )
-    return response.choices[0].message.content
+    
+    try:
+        client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
+        response = client.chat.completions.create(
+            model="deepseek-chat",
+            messages=[{"role": "user", "content": prompt}],
+            stream=False
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        return f"❌ AI 调用失败: {str(e)}"
 
 @app.get("/")
 def root():
     return {"message": "AI命理助手API运行中", "version": "1.0.0"}
+
+@app.get("/health")
+def health():
+    return {"status": "ok", "version": "1.0.0"}
 
 @app.options("/analyze")
 def options_analyze():
