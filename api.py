@@ -190,7 +190,8 @@ def get_prompt(bazi_str, gender, has_hour, module, year, liunian):
     - XX(格局名称)：……(无则不例举)
     - 特征：……(无则不例举)
     
-总结：XXX。
+四、总结
+XXX
 
 AI生成内容仅供参考"
 
