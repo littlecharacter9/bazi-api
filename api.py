@@ -13,6 +13,22 @@ from typing import Optional, List, Dict, Any
 from openai import OpenAI
 from lunar_python import Solar
 
+# ================== 读取规则文件 ==================
+def load_rules():
+    """从 rules.txt 读取八字推理规则"""
+    rules_path = os.path.join(os.path.dirname(__file__), "rules.txt")
+    try:
+        with open(rules_path, "r", encoding="utf-8") as f:
+            content = f.read()
+            print(f"✅ 规则文件加载成功，共 {len(content)} 字符")
+            return content
+    except FileNotFoundError:
+        print("⚠️ 警告: rules.txt 文件未找到，使用默认规则")
+        return ""
+    except Exception as e:
+        print(f"⚠️ 读取 rules.txt 失败: {e}")
+        return ""
+
 # ================== 请求模型 ==================
 class BaziRequest(BaseModel):
     birth: str
@@ -108,10 +124,17 @@ def get_prompt(bazi_str, gender, has_hour, module, year, liunian):
 4. 内容末尾加上：AI生成内容仅供参考。
 """
     
+    # ===== 加载规则库 =====
+    rules_content = load_rules()
+    rules_section = f"""
+【八字推理规则库 - 请严格依据以下规则进行推断，并按照格式输出】
+{rules_content}
+""" if rules_content else ""
+    
     # verify 单独处理，保持原版不变
     if module == 'verify':
         return f"""八字：{bazi_str}，性别：{gender}{hour_warning}
-
+{rules_section}
 请根据八字推断以下内容：
 
 【环境方位】
@@ -130,6 +153,7 @@ def get_prompt(bazi_str, gender, has_hour, module, year, liunian):
     templates = {
         'overview': f"""八字：{bazi_str}，性别：{gender}{hour_warning}
 {style_control}
+{rules_section}
 请进行八字综合分析，按以下结构输出：
 总体结论：（一句话概括你的八字特点和喜忌）
 
@@ -154,8 +178,8 @@ def get_prompt(bazi_str, gender, has_hour, module, year, liunian):
 五行总结：XXX
 三、八字格局
 ① 正格
-    - 格局：XX，格局类型+原因(正格：比劫格(比肩格、劫财格)、食伤格(食神格、伤官)、财才格(正财格、偏财格)、官杀格(正官格、七杀格)、印枭格(正印格、偏印格)、杂格(无十神透出，格局岁大运变化)，判断方法：月令十神(包括藏干)有在天干透出的既为正格)
-    - 特征：XX，表现/影响(性格、追求)
+    - 格局：XX，格局类型+原因
+    - 特征：XX，表现/影响(性格、追求，根据规则库内容适当延伸话术)
 ② 偏格：
     - 格局：XX，格局类型+原因
     - 特征：表现/影响(偏格：枭神夺食、伤官泄秀、伤官配印等等……)
@@ -168,6 +192,7 @@ AI生成内容仅供参考"
         
         'liunian': f"""八字：{bazi_str}，性别：{gender}{hour_warning}
 {style_control}
+{rules_section}
 请分析{year}年（{liunian}年）及未来两年的流年运势，按以下结构输出：
 总体结论：（一句话概括三年每年的重点关注项）
 
@@ -195,6 +220,7 @@ AI生成内容仅供参考""",
         
         'career': f"""八字：{bazi_str}，性别：{gender}{hour_warning}
 {style_control}
+{rules_section}
 请分析事业运势，按以下结构输出：
 总体结论：（一句话概括你的事业情况）
 
@@ -213,6 +239,7 @@ AI生成仅供参考""",
         
         'wealth': f"""八字：{bazi_str}，性别：{gender}{hour_warning}
 {style_control}
+{rules_section}
 请分析财运运势，按以下结构输出：
 总体结论：（一句话概括你的财运水平）
 
@@ -227,6 +254,7 @@ AI生成仅供参考""",
         
         'marriage': f"""八字：{bazi_str}，性别：{gender}{hour_warning}
 {style_control}
+{rules_section}
 请分析婚姻运势，按以下结构输出：
 总体结论：（一句话概括你的婚姻运势）
 
