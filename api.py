@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 from openai import OpenAI
-from lunar_python import Solar
+from lunar_python import Solar, Lunar
 
 # ================== 读取规则文件 ==================
 def load_rules():
@@ -112,7 +112,118 @@ def get_hour_warning(has_hour):
         return "\n⚠️ 未提供时辰，准确率约30%-40%"
     return ""
 
-def get_prompt(bazi_str, gender, has_hour, module, year, liunian):
+# ================== 大运计算函数 ==================
+def get_da_yun(bazi, gender, birth_year):
+    """
+    计算大运
+    bazi: 八字信息（年柱、月柱、日柱、时柱）
+    gender: 1=男, 0=女
+    birth_year: 出生年份
+    返回: 大运信息字典
+    """
+    # 月柱干支
+    month_gan = bazi['月柱'][0]
+    month_zhi = bazi['月柱'][1]
+    
+    # 年柱天干
+    year_gan = bazi['年柱'][0]
+    
+    # 阳年：甲丙戊庚壬
+    yang_years = ['甲', '丙', '戊', '庚', '壬']
+    is_yang = year_gan in yang_years
+    
+    # 大运顺逆：阳男阴女顺排，阴男阳女逆排
+    if (is_yang and gender == 1) or (not is_yang and gender == 0):
+        direction = 1  # 顺排
+    else:
+        direction = -1  # 逆排
+    
+    # 起运年龄（简化计算，默认3岁起运）
+    start_age = 3
+    
+    # 天干地支列表
+    gan = ['甲', '乙', '丙', '丁', '戊', '己', '庚', '辛', '壬', '癸']
+    zhi = ['子', '丑', '寅', '卯', '辰', '巳', '午', '未', '申', '酉', '戌', '亥']
+    
+    # 找到月柱在天干地支列表中的位置
+    try:
+        gan_index = gan.index(month_gan)
+    except ValueError:
+        gan_index = 0
+    try:
+        zhi_index = zhi.index(month_zhi)
+    except ValueError:
+        zhi_index = 0
+    
+    # 当前年龄
+    current_year = datetime.now().year
+    current_age = current_year - birth_year
+    
+    da_yun_list = []
+    current_da_yun = None
+    next_da_yun = None
+    
+    # 排 8 步大运
+    for i in range(8):
+        step = i + 1
+        gan_idx = (gan_index + direction * step) % 10
+        zhi_idx = (zhi_index + direction * step) % 12
+        da_gan = gan[gan_idx]
+        da_zhi = zhi[zhi_idx]
+        
+        age_start = start_age + i * 10
+        age_end = age_start + 9
+        
+        da_yun = {
+            '干支': f'{da_gan}{da_zhi}',
+            '年龄范围': f'{age_start}-{age_end}岁',
+            '年龄起始': age_start,
+            '年龄结束': age_end
+        }
+        da_yun_list.append(da_yun)
+        
+        # 判断当前大运
+        if age_start <= current_age <= age_end:
+            current_da_yun = da_yun
+            if i + 1 < len(da_yun_list):
+                next_da_yun = da_yun_list[i + 1]
+    
+    # 如果当前年龄还没到起运年龄，第一运为当前
+    if current_age < start_age and da_yun_list:
+        current_da_yun = da_yun_list[0]
+        if len(da_yun_list) > 1:
+            next_da_yun = da_yun_list[1]
+    
+    return {
+        'list': da_yun_list,
+        'current': current_da_yun,
+        'next': next_da_yun
+    }
+
+# ================== 大运格式化函数 ==================
+def format_da_yun_info(da_yun_data):
+    """格式化大运信息为文本"""
+    if not da_yun_data:
+        return ""
+    
+    result = "\n【大运信息】\n"
+    
+    if da_yun_data['current']:
+        current = da_yun_data['current']
+        result += f"当前大运：{current['干支']}（{current['年龄范围']}）\n"
+    
+    if da_yun_data['next']:
+        next_dy = da_yun_data['next']
+        result += f"下一步大运：{next_dy['干支']}（{next_dy['年龄范围']}）\n"
+    
+    # 列出所有大运
+    result += "\n一生大运排盘：\n"
+    for dy in da_yun_data['list']:
+        result += f"  {dy['干支']}（{dy['年龄范围']}）\n"
+    
+    return result
+
+def get_prompt(bazi_str, gender, has_hour, module, year, liunian, da_yun_data=None):
     hour_warning = get_hour_warning(has_hour)
     
     # 风格控制（仅用于非 verify 模块）
@@ -131,10 +242,14 @@ def get_prompt(bazi_str, gender, has_hour, module, year, liunian):
 {rules_content}
 """ if rules_content else ""
     
+    # ===== 格式化大运信息 =====
+    da_yun_info = format_da_yun_info(da_yun_data) if da_yun_data else ""
+    
     # verify 单独处理，保持原版不变
     if module == 'verify':
         return f"""八字：{bazi_str}，性别：{gender}{hour_warning}
 {rules_section}
+{da_yun_info}
 请根据八字推断以下内容：
 
 【环境方位】
@@ -154,6 +269,7 @@ def get_prompt(bazi_str, gender, has_hour, module, year, liunian):
         'overview': f"""八字：{bazi_str}，性别：{gender}{hour_warning}
 {style_control}
 {rules_section}
+{da_yun_info}
 请进行八字综合分析，按以下结构输出：
 总体结论：（一句话概括你的八字特点和喜忌）
 
@@ -196,7 +312,8 @@ AI生成内容仅供参考"
         'liunian': f"""八字：{bazi_str}，性别：{gender}{hour_warning}
 {style_control}
 {rules_section}
-请分析{year}年（{liunian}年）及未来两年的流年运势，按以下结构输出：
+{da_yun_info}
+请严格基于以上提供的大运信息分析流年运势，不要自行推算大运。按以下结构输出：
 总体结论：（一句话概括三年每年的重点关注项）
 
 一、三年运势
@@ -216,11 +333,11 @@ AI生成内容仅供参考"
     - XX：XX，原因(以上例举2-3条需要重点关注的方面，健康、财运、官运、感情、事业、六亲)
 综合：XX(综合说明该流年整体情况及需要重点关注的方面)
 
-二、XX大运(XX年-XX年)  --这里说明当前所在的大运情况
+二、当前大运分析（{da_yun_data['current']['干支'] if da_yun_data and da_yun_data['current'] else '未知'}，{da_yun_data['current']['年龄范围'] if da_yun_data and da_yun_data['current'] else '未知'}）
     说明当前大运情况及建议，突出需要重点注意的地方(机遇/风险)
 
-三、XX大运(XX年-XX年)  --这里说明下一个大运情况
-    说明当前大运情况及建议，突出需要重点注意的地方(机遇/风险)
+三、下一步大运分析（{da_yun_data['next']['干支'] if da_yun_data and da_yun_data['next'] else '未知'}，{da_yun_data['next']['年龄范围'] if da_yun_data and da_yun_data['next'] else '未知'}）
+    说明下一步大运情况及建议，突出需要重点注意的地方(机遇/风险)
 
 四、总结
 XXX。
@@ -230,6 +347,7 @@ AI生成内容仅供参考""",
         'career': f"""八字：{bazi_str}，性别：{gender}{hour_warning}
 {style_control}
 {rules_section}
+{da_yun_info}
 请分析事业运势，按以下结构输出：
 总体结论：（一句话概括你的事业情况）
 
@@ -256,6 +374,7 @@ AI生成仅供参考""",
         'wealth': f"""八字：{bazi_str}，性别：{gender}{hour_warning}
 {style_control}
 {rules_section}
+{da_yun_info}
 请分析财运运势，按以下结构输出：
 总体结论：（一句话概括你的财运水平）
 
@@ -271,6 +390,7 @@ AI生成仅供参考""",
         'marriage': f"""八字：{bazi_str}，性别：{gender}{hour_warning}
 {style_control}
 {rules_section}
+{da_yun_info}
 请分析婚姻运势，按以下结构输出：
 总体结论：（一句话概括你的婚姻运势）
 
@@ -321,7 +441,6 @@ if not API_KEY:
     print("⚠️ 警告: DEEPSEEK_API_KEY 环境变量未设置")
 
 # ===== 注意：不在这里初始化 OpenAI 客户端 =====
-# client = OpenAI(api_key=API_KEY, base_url="https://api.deepseek.com")
 # 改为在 call_ai 函数中延迟初始化
 
 def call_ai(prompt):
@@ -374,7 +493,10 @@ def analyze(request: BaziRequest):
         current_year = datetime.now().year
         liunian = get_liunian_ganzhi(current_year)
         
-        prompt = get_prompt(bazi_str, bazi['性别'], has_hour, request.module, current_year, liunian)
+        # ===== 计算大运信息 =====
+        da_yun_data = get_da_yun(bazi, gender, year)
+        
+        prompt = get_prompt(bazi_str, bazi['性别'], has_hour, request.module, current_year, liunian, da_yun_data)
         content = call_ai(prompt)
         
         return {"success": True, "data": {"bazi": bazi_str, "analysis": content}}
@@ -392,7 +514,9 @@ def verify(request: BaziRequest):
         bazi = get_bazi(year, month, day, hour, gender)
         bazi_str = f"{bazi['年柱']} {bazi['月柱']} {bazi['日柱']} {bazi['时柱']}"
         
-        prompt = get_prompt(bazi_str, bazi['性别'], has_hour, 'verify', 0, '')
+        # verify 模块也需要大运信息辅助
+        da_yun_data = get_da_yun(bazi, gender, year)
+        prompt = get_prompt(bazi_str, bazi['性别'], has_hour, 'verify', 0, '', da_yun_data)
         content = call_ai(prompt)
         
         return {"success": True, "data": {"bazi": bazi_str, "verify": content}}
