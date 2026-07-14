@@ -5,6 +5,7 @@ AI命理助手 - API 服务
 """
 import os
 import re
+import math
 from datetime import datetime
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -112,15 +113,15 @@ def get_hour_warning(has_hour):
         return "\n⚠️ 未提供时辰，准确率约30%-40%"
     return ""
 
-# ================== 大运计算函数 ==================
-def get_da_yun(bazi, gender, birth_year):
+# ================== 大运计算函数（精确版本） ==================
+def get_da_yun(bazi, gender, birth_year, birth_month, birth_day, birth_hour):
     """
-    计算大运
-    bazi: 八字信息（年柱、月柱、日柱、时柱）
-    gender: 1=男, 0=女
-    birth_year: 出生年份
-    返回: 大运信息字典
+    精确计算大运（含起运年龄计算）
     """
+    # 获取农历信息
+    solar = Solar.fromYmdHms(birth_year, birth_month, birth_day, birth_hour, 0, 0)
+    lunar = solar.getLunar()
+    
     # 月柱干支
     month_gan = bazi['月柱'][0]
     month_zhi = bazi['月柱'][1]
@@ -128,24 +129,82 @@ def get_da_yun(bazi, gender, birth_year):
     # 年柱天干
     year_gan = bazi['年柱'][0]
     
-    # 阳年：甲丙戊庚壬
+    # 阳年判断
     yang_years = ['甲', '丙', '戊', '庚', '壬']
     is_yang = year_gan in yang_years
     
-    # 大运顺逆：阳男阴女顺排，阴男阳女逆排
+    # 顺逆：阳男阴女顺，阴男阳女逆
     if (is_yang and gender == 1) or (not is_yang and gender == 0):
         direction = 1  # 顺排
     else:
         direction = -1  # 逆排
     
-    # 起运年龄（简化计算，默认3岁起运）
-    start_age = 3
+    # ===== 精确计算起运年龄 =====
+    start_age = None
+    
+    # 方法1: 使用 lunar_python 的 getStartAge() 方法
+    try:
+        start_age = lunar.getStartAge()
+        if start_age is not None:
+            print(f"✅ 使用 lunar_python 计算起运年龄: {start_age} 岁")
+    except Exception as e:
+        print(f"⚠️ getStartAge() 调用失败: {e}")
+    
+    # 方法2: 如果 getStartAge() 失败或返回 None，手动计算
+    if start_age is None or start_age <= 0:
+        try:
+            # 月柱地支对应的节气
+            month_zhi_to_jieqi = {
+                '寅': '立春', '卯': '惊蛰', '辰': '清明', '巳': '立夏',
+                '午': '芒种', '未': '小暑', '申': '立秋', '酉': '白露',
+                '戌': '寒露', '亥': '立冬', '子': '大雪', '丑': '小寒'
+            }
+            
+            # 顺排找下一个节气，逆排找上一个节气
+            target_jieqi = month_zhi_to_jieqi.get(month_zhi)
+            
+            if target_jieqi:
+                jie_qi_table = lunar.getJieQiTable()
+                target_date = None
+                
+                # 查找目标节气日期
+                for name, dt in jie_qi_table.items():
+                    if name == target_jieqi:
+                        target_date = dt
+                        break
+                
+                if target_date:
+                    from datetime import datetime as dt
+                    birth_dt = dt(birth_year, birth_month, birth_day, birth_hour)
+                    target_dt = dt(
+                        target_date.getYear(), 
+                        target_date.getMonth(), 
+                        target_date.getDay()
+                    )
+                    
+                    # 计算相差天数
+                    diff_days = abs((target_dt - birth_dt).days)
+                    
+                    # 三天为一岁，向上取整
+                    start_age = math.ceil(diff_days / 3)
+                    
+                    # 保证至少 1 岁
+                    if start_age < 1:
+                        start_age = 1
+                    
+                    print(f"✅ 手动计算起运年龄: {start_age} 岁（距离{target_jieqi}{diff_days}天）")
+        except Exception as e:
+            print(f"⚠️ 手动计算起运年龄失败: {e}")
+    
+    # 方法3: 如果还是失败，默认 3 岁
+    if start_age is None or start_age <= 0:
+        start_age = 3
+        print(f"⚠️ 使用默认起运年龄: {start_age} 岁")
     
     # 天干地支列表
     gan = ['甲', '乙', '丙', '丁', '戊', '己', '庚', '辛', '壬', '癸']
     zhi = ['子', '丑', '寅', '卯', '辰', '巳', '午', '未', '申', '酉', '戌', '亥']
     
-    # 找到月柱在天干地支列表中的位置
     try:
         gan_index = gan.index(month_gan)
     except ValueError:
@@ -178,7 +237,8 @@ def get_da_yun(bazi, gender, birth_year):
             '干支': f'{da_gan}{da_zhi}',
             '年龄范围': f'{age_start}-{age_end}岁',
             '年龄起始': age_start,
-            '年龄结束': age_end
+            '年龄结束': age_end,
+            '序号': i + 1
         }
         da_yun_list.append(da_yun)
         
@@ -197,29 +257,30 @@ def get_da_yun(bazi, gender, birth_year):
     return {
         'list': da_yun_list,
         'current': current_da_yun,
-        'next': next_da_yun
+        'next': next_da_yun,
+        'start_age': start_age,
+        'direction': '顺排' if direction == 1 else '逆排'
     }
 
-# ================== 大运格式化函数 ==================
 def format_da_yun_info(da_yun_data):
     """格式化大运信息为文本"""
     if not da_yun_data:
         return ""
     
-    result = "\n【大运信息】\n"
+    result = f"\n【大运信息】起运年龄：{da_yun_data.get('start_age', 3)}岁，{da_yun_data.get('direction', '')}\n\n"
     
-    if da_yun_data['current']:
+    if da_yun_data.get('current'):
         current = da_yun_data['current']
         result += f"当前大运：{current['干支']}（{current['年龄范围']}）\n"
     
-    if da_yun_data['next']:
+    if da_yun_data.get('next'):
         next_dy = da_yun_data['next']
         result += f"下一步大运：{next_dy['干支']}（{next_dy['年龄范围']}）\n"
     
     # 列出所有大运
     result += "\n一生大运排盘：\n"
-    for dy in da_yun_data['list']:
-        result += f"  {dy['干支']}（{dy['年龄范围']}）\n"
+    for dy in da_yun_data.get('list', []):
+        result += f"  第{dy['序号']}步大运：{dy['干支']}（{dy['年龄范围']}）\n"
     
     return result
 
@@ -313,7 +374,9 @@ AI生成内容仅供参考"
 {style_control}
 {rules_section}
 {da_yun_info}
-请严格基于以上提供的大运信息分析流年运势，不要自行推算大运。按以下结构输出：
+【流年信息】当前年份：{year}年（{liunian}年）
+
+请严格基于以上提供的大运信息和流年信息分析流年运势，不要自行推算大运。按以下结构输出：
 总体结论：（一句话概括三年每年的重点关注项）
 
 一、三年运势
@@ -493,8 +556,8 @@ def analyze(request: BaziRequest):
         current_year = datetime.now().year
         liunian = get_liunian_ganzhi(current_year)
         
-        # ===== 计算大运信息 =====
-        da_yun_data = get_da_yun(bazi, gender, year)
+        # ===== 计算大运信息（传入出生年月日时） =====
+        da_yun_data = get_da_yun(bazi, gender, year, month, day, hour)
         
         prompt = get_prompt(bazi_str, bazi['性别'], has_hour, request.module, current_year, liunian, da_yun_data)
         content = call_ai(prompt)
@@ -515,7 +578,7 @@ def verify(request: BaziRequest):
         bazi_str = f"{bazi['年柱']} {bazi['月柱']} {bazi['日柱']} {bazi['时柱']}"
         
         # verify 模块也需要大运信息辅助
-        da_yun_data = get_da_yun(bazi, gender, year)
+        da_yun_data = get_da_yun(bazi, gender, year, month, day, hour)
         prompt = get_prompt(bazi_str, bazi['性别'], has_hour, 'verify', 0, '', da_yun_data)
         content = call_ai(prompt)
         
