@@ -396,11 +396,17 @@ AI生成内容仅供参考"
     - XX：XX，原因(以上例举2-3条需要重点关注的方面，健康、财运、官运、感情、事业、六亲)
 综合：XX(综合说明该流年整体情况及需要重点关注的方面)
 
-二、当前大运分析（{da_yun_data['current']['干支'] if da_yun_data and da_yun_data['current'] else '未知'}，{da_yun_data['current']['年龄范围'] if da_yun_data and da_yun_data['current'] else '未知'}）
-    说明当前大运情况及建议，突出需要重点注意的地方(机遇/风险)
+二、XX大运（{da_yun_data['current']['干支'] if da_yun_data and da_yun_data['current'] else '未知'}，{da_yun_data['current']['年龄范围'] if da_yun_data and da_yun_data['current'] else '未知'}）
+    - XX：XX，原因
+    - XX：XX，原因
+    - XX：XX，原因(以上例举2-3条需要重点关注的方面，健康、财运、官运、感情、事业、六亲)
+综合：重点关注+建议(怎么利用好大运+风险规避)
 
 三、下一步大运分析（{da_yun_data['next']['干支'] if da_yun_data and da_yun_data['next'] else '未知'}，{da_yun_data['next']['年龄范围'] if da_yun_data and da_yun_data['next'] else '未知'}）
-    说明下一步大运情况及建议，突出需要重点注意的地方(机遇/风险)
+    - XX：XX，原因
+    - XX：XX，原因
+    - XX：XX，原因(以上例举2-3条需要重点关注的方面，健康、财运、官运、感情、事业、六亲)
+综合：重点关注+建议(怎么利用好大运+风险规避)
 
 四、总结
 XXX。
@@ -441,12 +447,19 @@ AI生成仅供参考""",
 请分析财运运势，按以下结构输出：
 总体结论：（一句话概括你的财运水平）
 
-一、财富等级：（你属于什么水平，说明理由）
-二、求财方式：（适合用什么方式赚钱，说明理由）
-三、财运时机：（哪些年份财运好，说明理由）
-四、守财建议：（如何守住财富，说明理由）
+一、财富等级
+    - 财富等级：XX
+    - 理由：XX
+    
+二、求财方式
+    - XX：XX(例举2-3条可能的求财方式并说明理由)
+    - XX：XX(例举可能的求财方式)
+    
+三、财运时机
+    - XX：XX(例举2-3条大运/流年的财运时机和可能的求财方式，说明原因)
+    - XX：XX
 
-总结：XX。
+四、总结：XX。
 
 AI生成仅供参考""",
         
