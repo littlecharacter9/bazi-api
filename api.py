@@ -607,53 +607,13 @@ def init_feedback_db():
     conn.close()
     print("✅ 反馈数据库初始化完成")
 
-# ================== 邮件通知 ==================
+# ================== 邮件通知（暂时禁用） ==================
 def send_feedback_email(feedback_type, content, contact, birth, bazi):
-    """发送反馈邮件到你的邮箱"""
-    smtp_host = os.environ.get("SMTP_HOST", "smtp.qq.com")
-    smtp_port = int(os.environ.get("SMTP_PORT", 465))
-    smtp_user = os.environ.get("SMTP_USER", "1399094604@qq.com")
-    smtp_password = os.environ.get("SMTP_PASSWORD")
-    smtp_to = os.environ.get("SMTP_TO", "1399094604@qq.com")
-    
-    if not smtp_password:
-        print("⚠️ SMTP_PASSWORD 未设置，无法发送邮件")
-        return False
-    
-    try:
-        # 构建邮件内容
-        subject = f"【八戒命理】用户反馈 - {feedback_type}"
-        body = f"""
-📝 用户反馈
-
-反馈类型：{feedback_type}
-反馈内容：{content}
-
-📌 关联信息：
-生辰：{birth or '未提供'}
-八字：{bazi or '未提供'}
-联系方式：{contact or '未提供'}
-
-提交时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-        """
-        
-        msg = MIMEMultipart()
-        msg['From'] = smtp_user
-        msg['To'] = smtp_to
-        msg['Subject'] = subject
-        msg.attach(MIMEText(body, 'plain', 'utf-8'))
-        
-        # 发送邮件（SSL）
-        server = smtplib.SMTP_SSL(smtp_host, smtp_port)
-        server.login(smtp_user, smtp_password)
-        server.sendmail(smtp_user, [smtp_to], msg.as_string())
-        server.quit()
-        
-        print(f"✅ 反馈邮件已发送到 {smtp_to}")
-        return True
-    except Exception as e:
-        print(f"❌ 发送邮件失败: {e}")
-        return False
+    """发送反馈邮件到你的邮箱（Railway Free 计划不支持出站网络，暂时禁用）"""
+    # 此函数暂时保留但不会被调用
+    # 如需启用，请升级 Railway 到 Hobby 或 Pro 计划
+    print("📧 邮件发送功能已禁用（Railway Free 计划不支持出站网络）")
+    return False
 
 # ================== API 服务 ==================
 app = FastAPI(title="AI命理助手API", version="1.0.0")
@@ -715,6 +675,10 @@ def options_verify():
 
 @app.options("/verify_adjust")
 def options_verify_adjust():
+    return {"message": "OK"}
+
+@app.options("/feedback")
+def options_feedback():
     return {"message": "OK"}
 
 @app.post("/analyze")
@@ -806,10 +770,10 @@ def verify_adjust(request: VerifyAdjustRequest):
     except Exception as e:
         return {"success": False, "error": str(e)}
 
-# ================== 反馈端点 ==================
+# ================== 反馈端点（仅存数据库，不发送邮件） ==================
 @app.post("/feedback")
 def submit_feedback(request: FeedbackRequest):
-    """提交反馈"""
+    """提交反馈（仅存数据库，Railway Free 计划不支持出站网络发送邮件）"""
     try:
         # 1. 保存到 SQLite
         conn = sqlite3.connect('feedback.db')
@@ -828,14 +792,15 @@ def submit_feedback(request: FeedbackRequest):
         conn.commit()
         conn.close()
         
-        # 2. 发送邮件通知
-        send_feedback_email(
-            request.feedback_type,
-            request.content,
-            request.contact,
-            request.birth,
-            request.bazi
-        )
+        # 2. 邮件发送已禁用（Railway Free 计划不支持出站网络）
+        # 如需启用邮件通知，请升级 Railway 到 Hobby 或 Pro 计划，并取消下面的注释
+        # send_feedback_email(
+        #     request.feedback_type,
+        #     request.content,
+        #     request.contact,
+        #     request.birth,
+        #     request.bazi
+        # )
         
         return {"success": True, "message": "感谢您的反馈！"}
     except Exception as e:
