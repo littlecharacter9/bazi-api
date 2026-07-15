@@ -6,7 +6,11 @@ AI命理助手 - API 服务
 import os
 import re
 import math
+import sqlite3
+import smtplib
 from datetime import datetime
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -43,6 +47,13 @@ class FeedbackItem(BaseModel):
 class VerifyAdjustRequest(BaseModel):
     birth: str
     feedback_items: List[FeedbackItem]
+
+class FeedbackRequest(BaseModel):
+    feedback_type: str
+    content: str
+    contact: Optional[str] = ""
+    birth: Optional[str] = ""
+    bazi: Optional[str] = ""
 
 # ================== 基础函数 ==================
 def parse_gender(user_input):
@@ -576,6 +587,74 @@ def get_adjust_prompt(bazi_str, gender, section, original_content, user_feedback
 
 请直接输出重新生成后的【{section}】内容："""
 
+# ================== 反馈数据库 ==================
+def init_feedback_db():
+    """初始化反馈数据库"""
+    conn = sqlite3.connect('feedback.db')
+    cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS feedback (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            feedback_type TEXT,
+            content TEXT,
+            contact TEXT,
+            birth TEXT,
+            bazi TEXT,
+            created_at TEXT
+        )
+    ''')
+    conn.commit()
+    conn.close()
+    print("✅ 反馈数据库初始化完成")
+
+# ================== 邮件通知 ==================
+def send_feedback_email(feedback_type, content, contact, birth, bazi):
+    """发送反馈邮件到你的邮箱"""
+    smtp_host = os.environ.get("SMTP_HOST", "smtp.qq.com")
+    smtp_port = int(os.environ.get("SMTP_PORT", 465))
+    smtp_user = os.environ.get("SMTP_USER", "1399094604@qq.com")
+    smtp_password = os.environ.get("SMTP_PASSWORD")
+    smtp_to = os.environ.get("SMTP_TO", "1399094604@qq.com")
+    
+    if not smtp_password:
+        print("⚠️ SMTP_PASSWORD 未设置，无法发送邮件")
+        return False
+    
+    try:
+        # 构建邮件内容
+        subject = f"【八戒命理】用户反馈 - {feedback_type}"
+        body = f"""
+📝 用户反馈
+
+反馈类型：{feedback_type}
+反馈内容：{content}
+
+📌 关联信息：
+生辰：{birth or '未提供'}
+八字：{bazi or '未提供'}
+联系方式：{contact or '未提供'}
+
+提交时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+        """
+        
+        msg = MIMEMultipart()
+        msg['From'] = smtp_user
+        msg['To'] = smtp_to
+        msg['Subject'] = subject
+        msg.attach(MIMEText(body, 'plain', 'utf-8'))
+        
+        # 发送邮件（SSL）
+        server = smtplib.SMTP_SSL(smtp_host, smtp_port)
+        server.login(smtp_user, smtp_password)
+        server.sendmail(smtp_user, [smtp_to], msg.as_string())
+        server.quit()
+        
+        print(f"✅ 反馈邮件已发送到 {smtp_to}")
+        return True
+    except Exception as e:
+        print(f"❌ 发送邮件失败: {e}")
+        return False
+
 # ================== API 服务 ==================
 app = FastAPI(title="AI命理助手API", version="1.0.0")
 
@@ -594,6 +673,9 @@ app.add_middleware(
 API_KEY = os.environ.get("DEEPSEEK_API_KEY")
 if not API_KEY:
     print("⚠️ 警告: DEEPSEEK_API_KEY 环境变量未设置")
+
+# ===== 初始化反馈数据库 =====
+init_feedback_db()
 
 # ===== 注意：不在这里初始化 OpenAI 客户端 =====
 # 改为在 call_ai 函数中延迟初始化
@@ -721,6 +803,41 @@ def verify_adjust(request: VerifyAdjustRequest):
         
         return {"success": True, "data": {"adjusted_items": adjusted_items}}
         
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+# ================== 反馈端点 ==================
+@app.post("/feedback")
+def submit_feedback(request: FeedbackRequest):
+    """提交反馈"""
+    try:
+        # 1. 保存到 SQLite
+        conn = sqlite3.connect('feedback.db')
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO feedback (feedback_type, content, contact, birth, bazi, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (
+            request.feedback_type,
+            request.content,
+            request.contact,
+            request.birth,
+            request.bazi,
+            datetime.now().isoformat()
+        ))
+        conn.commit()
+        conn.close()
+        
+        # 2. 发送邮件通知
+        send_feedback_email(
+            request.feedback_type,
+            request.content,
+            request.contact,
+            request.birth,
+            request.bazi
+        )
+        
+        return {"success": True, "message": "感谢您的反馈！"}
     except Exception as e:
         return {"success": False, "error": str(e)}
 
