@@ -806,6 +806,39 @@ def submit_feedback(request: FeedbackRequest):
     except Exception as e:
         return {"success": False, "error": str(e)}
 
+# ================== 查看反馈列表（密码保护） ==================
+@app.get("/feedback_list")
+def get_feedback_list(password: str = ""):
+    """查看所有反馈（需要密码验证）"""
+    # 密码验证（密码设为你的微信号）
+    if password != "mmj1399094604":
+        return {"success": False, "error": "密码错误"}
+    
+    try:
+        conn = sqlite3.connect('feedback.db')
+        cursor = conn.cursor()
+        cursor.execute('SELECT id, feedback_type, content, contact, birth, bazi, created_at FROM feedback ORDER BY id DESC')
+        rows = cursor.fetchall()
+        conn.close()
+        
+        if not rows:
+            return {"success": True, "count": 0, "data": "📋 暂无反馈记录"}
+        
+        result = "📋 反馈列表\n" + "="*50 + "\n"
+        for row in rows:
+            result += f"\nID: {row[0]}\n"
+            result += f"类型: {row[1]}\n"
+            result += f"内容: {row[2]}\n"
+            result += f"联系方式: {row[3] or '未提供'}\n"
+            result += f"生辰: {row[4] or '未提供'}\n"
+            result += f"八字: {row[5] or '未提供'}\n"
+            result += f"时间: {row[6]}\n"
+            result += "-"*30 + "\n"
+        
+        return {"success": True, "count": len(rows), "data": result}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
 # ================== 启动服务 ==================
 if __name__ == "__main__":
     import uvicorn
