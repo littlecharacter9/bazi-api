@@ -11,7 +11,7 @@ import smtplib
 from datetime import datetime
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
@@ -54,6 +54,7 @@ class FeedbackRequest(BaseModel):
     contact: Optional[str] = ""
     birth: Optional[str] = ""
     bazi: Optional[str] = ""
+    image: Optional[str] = ""  # Base64 编码的图片
 
 # ================== 基础函数 ==================
 def parse_gender(user_input):
@@ -589,23 +590,41 @@ def get_adjust_prompt(bazi_str, gender, section, original_content, user_feedback
 
 # ================== 反馈数据库 ==================
 def init_feedback_db():
-    """初始化反馈数据库"""
+    """初始化反馈数据库（含 image 字段）"""
     conn = sqlite3.connect('feedback.db')
     cursor = conn.cursor()
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS feedback (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            feedback_type TEXT,
-            content TEXT,
-            contact TEXT,
-            birth TEXT,
-            bazi TEXT,
-            created_at TEXT
-        )
-    ''')
+    # 检查表是否存在，不存在则创建
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='feedback'")
+    table_exists = cursor.fetchone()
+    
+    if not table_exists:
+        # 创建新表
+        cursor.execute('''
+            CREATE TABLE feedback (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                feedback_type TEXT,
+                content TEXT,
+                contact TEXT,
+                birth TEXT,
+                bazi TEXT,
+                image TEXT,
+                created_at TEXT
+            )
+        ''')
+        print("✅ 反馈数据库创建完成（含 image 字段）")
+    else:
+        # 检查 image 字段是否存在
+        cursor.execute("PRAGMA table_info(feedback)")
+        columns = [col[1] for col in cursor.fetchall()]
+        if 'image' not in columns:
+            # 添加 image 字段
+            cursor.execute('ALTER TABLE feedback ADD COLUMN image TEXT')
+            print("✅ 已添加 image 字段到反馈数据库")
+        else:
+            print("✅ 反馈数据库已就绪（含 image 字段）")
+    
     conn.commit()
     conn.close()
-    print("✅ 反馈数据库初始化完成")
 
 # ================== 邮件通知（暂时禁用） ==================
 def send_feedback_email(feedback_type, content, contact, birth, bazi):
@@ -770,46 +789,40 @@ def verify_adjust(request: VerifyAdjustRequest):
     except Exception as e:
         return {"success": False, "error": str(e)}
 
-# ================== 反馈端点（仅存数据库，不发送邮件） ==================
+# ================== 反馈端点（支持图片） ==================
 @app.post("/feedback")
 def submit_feedback(request: FeedbackRequest):
-    """提交反馈（仅存数据库，Railway Free 计划不支持出站网络发送邮件）"""
+    """提交反馈（支持图片，Railway Free 计划不支持出站网络发送邮件）"""
     try:
-        # 1. 保存到 SQLite
+        # 1. 保存到 SQLite（含图片）
         conn = sqlite3.connect('feedback.db')
         cursor = conn.cursor()
         cursor.execute('''
-            INSERT INTO feedback (feedback_type, content, contact, birth, bazi, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO feedback (feedback_type, content, contact, birth, bazi, image, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
         ''', (
             request.feedback_type,
             request.content,
             request.contact,
             request.birth,
             request.bazi,
+            request.image,
             datetime.now().isoformat()
         ))
         conn.commit()
         conn.close()
         
         # 2. 邮件发送已禁用（Railway Free 计划不支持出站网络）
-        # 如需启用邮件通知，请升级 Railway 到 Hobby 或 Pro 计划，并取消下面的注释
-        # send_feedback_email(
-        #     request.feedback_type,
-        #     request.content,
-        #     request.contact,
-        #     request.birth,
-        #     request.bazi
-        # )
+        # 如需启用邮件通知，请升级 Railway 到 Hobby 或 Pro 计划
         
         return {"success": True, "message": "感谢您的反馈！"}
     except Exception as e:
         return {"success": False, "error": str(e)}
 
-# ================== 查看反馈列表（密码保护） ==================
+# ================== 查看反馈列表（密码保护，含图片标识） ==================
 @app.get("/feedback_list")
 def get_feedback_list(password: str = ""):
-    """查看所有反馈（需要密码验证）"""
+    """查看所有反馈（需要密码验证），显示是否有图片"""
     # 密码验证（密码设为你的微信号）
     if password != "mmj1399094604":
         return {"success": False, "error": "密码错误"}
@@ -817,7 +830,13 @@ def get_feedback_list(password: str = ""):
     try:
         conn = sqlite3.connect('feedback.db')
         cursor = conn.cursor()
-        cursor.execute('SELECT id, feedback_type, content, contact, birth, bazi, created_at FROM feedback ORDER BY id DESC')
+        # 包含 image 字段，用 CASE WHEN 判断是否有图片
+        cursor.execute('''
+            SELECT id, feedback_type, content, contact, birth, bazi, 
+                   CASE WHEN image IS NOT NULL AND image != '' THEN '有图片' ELSE '无图片' END as has_image,
+                   created_at 
+            FROM feedback ORDER BY id DESC
+        ''')
         rows = cursor.fetchall()
         conn.close()
         
@@ -832,10 +851,54 @@ def get_feedback_list(password: str = ""):
             result += f"联系方式: {row[3] or '未提供'}\n"
             result += f"生辰: {row[4] or '未提供'}\n"
             result += f"八字: {row[5] or '未提供'}\n"
-            result += f"时间: {row[6]}\n"
+            result += f"📷 图片: {row[6]}\n"
+            result += f"时间: {row[7]}\n"
             result += "-"*30 + "\n"
         
         return {"success": True, "count": len(rows), "data": result}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+# ================== 查看反馈图片（密码保护） ==================
+@app.get("/feedback_image/{feedback_id}")
+def get_feedback_image(feedback_id: int, password: str = ""):
+    """查看反馈图片"""
+    # 密码验证
+    if password != "mmj1399094604":
+        return {"success": False, "error": "密码错误"}
+    
+    try:
+        conn = sqlite3.connect('feedback.db')
+        cursor = conn.cursor()
+        cursor.execute('SELECT image FROM feedback WHERE id = ?', (feedback_id,))
+        row = cursor.fetchone()
+        conn.close()
+        
+        if not row or not row[0]:
+            return {"success": False, "error": "没有图片"}
+        
+        # 解析 Base64 图片数据
+        image_data = row[0]
+        # 如果是 data:image/png;base64,xxx 格式，提取纯 Base64
+        if image_data.startswith('data:image'):
+            # 提取 Base64 部分
+            import base64
+            # 获取图片类型
+            img_type = image_data.split(';')[0].split('/')[1]
+            # 提取 Base64 数据
+            base64_str = image_data.split(',')[1]
+            # 解码
+            try:
+                import base64 as b64
+                image_bytes = b64.b64decode(base64_str)
+                return Response(content=image_bytes, media_type=f"image/{img_type}")
+            except:
+                # 如果解码失败，尝试直接用原始数据
+                return Response(content=image_data, media_type="image/png")
+        else:
+            # 直接返回 Base64 字符串（简单处理）
+            return Response(content=image_data, media_type="image/png")
+            
     except Exception as e:
         return {"success": False, "error": str(e)}
 
