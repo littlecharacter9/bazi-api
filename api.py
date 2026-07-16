@@ -592,40 +592,44 @@ def get_adjust_prompt(bazi_str, gender, section, original_content, user_feedback
 # ================== 反馈数据库 ==================
 def init_feedback_db():
     """初始化反馈数据库（含 image 字段）"""
-    conn = sqlite3.connect('feedback.db')
-    cursor = conn.cursor()
-    # 检查表是否存在，不存在则创建
-    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='feedback'")
-    table_exists = cursor.fetchone()
-    
-    if not table_exists:
-        # 创建新表
-        cursor.execute('''
-            CREATE TABLE feedback (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                feedback_type TEXT,
-                content TEXT,
-                contact TEXT,
-                birth TEXT,
-                bazi TEXT,
-                image TEXT,
-                created_at TEXT
-            )
-        ''')
-        print("✅ 反馈数据库创建完成（含 image 字段）")
-    else:
-        # 检查 image 字段是否存在
-        cursor.execute("PRAGMA table_info(feedback)")
-        columns = [col[1] for col in cursor.fetchall()]
-        if 'image' not in columns:
-            # 添加 image 字段
-            cursor.execute('ALTER TABLE feedback ADD COLUMN image TEXT')
-            print("✅ 已添加 image 字段到反馈数据库")
+    try:
+        conn = sqlite3.connect('feedback.db')
+        cursor = conn.cursor()
+        
+        # 检查表是否存在
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='feedback'")
+        table_exists = cursor.fetchone()
+        
+        if not table_exists:
+            cursor.execute('''
+                CREATE TABLE feedback (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    feedback_type TEXT,
+                    content TEXT,
+                    contact TEXT,
+                    birth TEXT,
+                    bazi TEXT,
+                    image TEXT,
+                    created_at TEXT
+                )
+            ''')
+            print("✅ 反馈数据库创建完成")
         else:
-            print("✅ 反馈数据库已就绪（含 image 字段）")
-    
-    conn.commit()
-    conn.close()
+            # 检查 image 字段是否存在
+            cursor.execute("PRAGMA table_info(feedback)")
+            columns = [col[1] for col in cursor.fetchall()]
+            if 'image' not in columns:
+                cursor.execute('ALTER TABLE feedback ADD COLUMN image TEXT')
+                print("✅ image 字段添加完成")
+            else:
+                print("✅ 反馈数据库已就绪")
+        
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        print(f"❌ 数据库初始化失败: {e}")
+        return False
 
 # ================== 邮件通知（暂时禁用） ==================
 def send_feedback_email(feedback_type, content, contact, birth, bazi):
@@ -826,7 +830,10 @@ def get_feedback_list(password: str = ""):
     """查看所有反馈（需要密码验证），HTML 格式显示，换行清晰"""
     # 密码验证（密码设为你的微信号）
     if password != "mmj1399094604":
-        return HTMLResponse(content="<!DOCTYPE html><html><head><meta charset='UTF-8'><title>提示</title></head><body><h2>🔒 密码错误</h2><p>请使用正确的密码访问</p></body></html>", status_code=403)
+        return HTMLResponse(
+            content="<!DOCTYPE html><html><head><meta charset='UTF-8'><title>提示</title></head><body><h2>🔒 密码错误</h2><p>请使用正确的密码访问</p></body></html>",
+            status_code=403
+        )
     
     try:
         conn = sqlite3.connect('feedback.db')
@@ -1017,5 +1024,11 @@ def get_feedback_image(feedback_id: int, password: str = ""):
 if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("PORT", 8000))
-    print(f"启动服务，端口: {port}")
+    
+    print("="*50)
+    print("🚀 八戒命理 API 服务启动中...")
+    print("="*50)
+    print(f"🌐 监听端口: {port}")
+    print("="*50)
+    
     uvicorn.run(app, host="0.0.0.0", port=port)
