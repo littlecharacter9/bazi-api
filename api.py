@@ -8,6 +8,7 @@ import re
 import math
 import sqlite3
 import smtplib
+import base64
 from datetime import datetime
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -819,10 +820,10 @@ def submit_feedback(request: FeedbackRequest):
     except Exception as e:
         return {"success": False, "error": str(e)}
 
-# ================== 查看反馈列表（密码保护，含图片标识） ==================
+# ================== 查看反馈列表（密码保护，含图片链接） ==================
 @app.get("/feedback_list")
 def get_feedback_list(password: str = ""):
-    """查看所有反馈（需要密码验证），显示是否有图片"""
+    """查看所有反馈（需要密码验证），有图片时直接显示图片链接"""
     # 密码验证（密码设为你的微信号）
     if password != "mmj1399094604":
         return {"success": False, "error": "密码错误"}
@@ -830,7 +831,6 @@ def get_feedback_list(password: str = ""):
     try:
         conn = sqlite3.connect('feedback.db')
         cursor = conn.cursor()
-        # 包含 image 字段，用 CASE WHEN 判断是否有图片
         cursor.execute('''
             SELECT id, feedback_type, content, contact, birth, bazi, 
                    CASE WHEN image IS NOT NULL AND image != '' THEN '有图片' ELSE '无图片' END as has_image,
@@ -851,7 +851,10 @@ def get_feedback_list(password: str = ""):
             result += f"联系方式: {row[3] or '未提供'}\n"
             result += f"生辰: {row[4] or '未提供'}\n"
             result += f"八字: {row[5] or '未提供'}\n"
-            result += f"📷 图片: {row[6]}\n"
+            if row[6] == '有图片':
+                result += f"📷 图片: https://api.bajiemingli.top/feedback_image/{row[0]}?password=mmj1399094604\n"
+            else:
+                result += f"📷 图片: 无图片\n"
             result += f"时间: {row[7]}\n"
             result += "-"*30 + "\n"
         
@@ -877,27 +880,34 @@ def get_feedback_image(feedback_id: int, password: str = ""):
         if not row or not row[0]:
             return {"success": False, "error": "没有图片"}
         
-        # 解析 Base64 图片数据
         image_data = row[0]
-        # 如果是 data:image/png;base64,xxx 格式，提取纯 Base64
+        
+        # 检查是否是 data:image/xxx;base64, 格式
         if image_data.startswith('data:image'):
-            # 提取 Base64 部分
-            import base64
-            # 获取图片类型
+            # 提取图片类型
             img_type = image_data.split(';')[0].split('/')[1]
-            # 提取 Base64 数据
+            # 提取 Base64 数据（去掉前缀）
             base64_str = image_data.split(',')[1]
-            # 解码
             try:
-                import base64 as b64
-                image_bytes = b64.b64decode(base64_str)
+                # 解码 Base64
+                image_bytes = base64.b64decode(base64_str)
+                # 直接返回图片二进制数据
                 return Response(content=image_bytes, media_type=f"image/{img_type}")
-            except:
-                # 如果解码失败，尝试直接用原始数据
-                return Response(content=image_data, media_type="image/png")
+            except Exception as e:
+                print(f"❌ Base64解码失败: {e}")
+                # 如果解码失败，尝试作为纯 Base64 字符串处理
+                try:
+                    image_bytes = base64.b64decode(image_data)
+                    return Response(content=image_bytes, media_type="image/png")
+                except:
+                    return {"success": False, "error": f"图片数据格式错误: {str(e)}"}
         else:
-            # 直接返回 Base64 字符串（简单处理）
-            return Response(content=image_data, media_type="image/png")
+            # 如果不是 data:image 格式，尝试直接解码
+            try:
+                image_bytes = base64.b64decode(image_data)
+                return Response(content=image_bytes, media_type="image/png")
+            except:
+                return {"success": False, "error": "图片格式不支持"}
             
     except Exception as e:
         return {"success": False, "error": str(e)}
