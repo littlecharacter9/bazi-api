@@ -12,7 +12,7 @@ import base64
 from datetime import datetime
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from fastapi import FastAPI, Response, HTMLResponse
+from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
@@ -592,44 +592,40 @@ def get_adjust_prompt(bazi_str, gender, section, original_content, user_feedback
 # ================== 反馈数据库 ==================
 def init_feedback_db():
     """初始化反馈数据库（含 image 字段）"""
-    try:
-        conn = sqlite3.connect('feedback.db')
-        cursor = conn.cursor()
-        
-        # 检查表是否存在
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='feedback'")
-        table_exists = cursor.fetchone()
-        
-        if not table_exists:
-            cursor.execute('''
-                CREATE TABLE feedback (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    feedback_type TEXT,
-                    content TEXT,
-                    contact TEXT,
-                    birth TEXT,
-                    bazi TEXT,
-                    image TEXT,
-                    created_at TEXT
-                )
-            ''')
-            print("✅ 反馈数据库创建完成")
+    conn = sqlite3.connect('feedback.db')
+    cursor = conn.cursor()
+    # 检查表是否存在，不存在则创建
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='feedback'")
+    table_exists = cursor.fetchone()
+    
+    if not table_exists:
+        # 创建新表
+        cursor.execute('''
+            CREATE TABLE feedback (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                feedback_type TEXT,
+                content TEXT,
+                contact TEXT,
+                birth TEXT,
+                bazi TEXT,
+                image TEXT,
+                created_at TEXT
+            )
+        ''')
+        print("✅ 反馈数据库创建完成（含 image 字段）")
+    else:
+        # 检查 image 字段是否存在
+        cursor.execute("PRAGMA table_info(feedback)")
+        columns = [col[1] for col in cursor.fetchall()]
+        if 'image' not in columns:
+            # 添加 image 字段
+            cursor.execute('ALTER TABLE feedback ADD COLUMN image TEXT')
+            print("✅ 已添加 image 字段到反馈数据库")
         else:
-            # 检查 image 字段是否存在
-            cursor.execute("PRAGMA table_info(feedback)")
-            columns = [col[1] for col in cursor.fetchall()]
-            if 'image' not in columns:
-                cursor.execute('ALTER TABLE feedback ADD COLUMN image TEXT')
-                print("✅ image 字段添加完成")
-            else:
-                print("✅ 反馈数据库已就绪")
-        
-        conn.commit()
-        conn.close()
-        return True
-    except Exception as e:
-        print(f"❌ 数据库初始化失败: {e}")
-        return False
+            print("✅ 反馈数据库已就绪（含 image 字段）")
+    
+    conn.commit()
+    conn.close()
 
 # ================== 邮件通知（暂时禁用） ==================
 def send_feedback_email(feedback_type, content, contact, birth, bazi):
@@ -824,151 +820,47 @@ def submit_feedback(request: FeedbackRequest):
     except Exception as e:
         return {"success": False, "error": str(e)}
 
-# ================== 查看反馈列表（密码保护，HTML 格式） ==================
+# ================== 查看反馈列表（密码保护，含图片链接） ==================
 @app.get("/feedback_list")
 def get_feedback_list(password: str = ""):
-    """查看所有反馈（需要密码验证），HTML 格式显示，换行清晰"""
+    """查看所有反馈（需要密码验证），有图片时直接显示图片链接"""
     # 密码验证（密码设为你的微信号）
     if password != "mmj1399094604":
-        return HTMLResponse(
-            content="<!DOCTYPE html><html><head><meta charset='UTF-8'><title>提示</title></head><body><h2>🔒 密码错误</h2><p>请使用正确的密码访问</p></body></html>",
-            status_code=403
-        )
+        return {"success": False, "error": "密码错误"}
     
     try:
         conn = sqlite3.connect('feedback.db')
         cursor = conn.cursor()
         cursor.execute('''
             SELECT id, feedback_type, content, contact, birth, bazi, 
-                   CASE WHEN image IS NOT NULL AND image != '' THEN 1 ELSE 0 END as has_image,
+                   CASE WHEN image IS NOT NULL AND image != '' THEN '有图片' ELSE '无图片' END as has_image,
                    created_at 
             FROM feedback ORDER BY id DESC
         ''')
         rows = cursor.fetchall()
         conn.close()
         
-        html = '''<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>反馈列表 - 八戒命理</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
-            background: #f5f5f7;
-            padding: 20px;
-            max-width: 800px;
-            margin: 0 auto;
-            color: #1c1c1e;
-        }
-        h1 { font-size: 24px; color: #1a1a2e; margin-bottom: 4px; }
-        .subtitle { color: #888; font-size: 14px; margin-bottom: 20px; }
-        .count { color: #888; font-size: 14px; margin-bottom: 20px; }
-        .card {
-            background: white;
-            border-radius: 16px;
-            padding: 20px;
-            margin-bottom: 16px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
-        }
-        .card-header {
-            display: flex;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 8px;
-            margin-bottom: 10px;
-        }
-        .id { color: #888; font-size: 13px; }
-        .type {
-            display: inline-block;
-            background: #e6b980;
-            padding: 2px 14px;
-            border-radius: 12px;
-            font-size: 12px;
-            font-weight: 500;
-            color: #1a1a2e;
-        }
-        .time { font-size: 12px; color: #888; margin-left: auto; }
-        .content {
-            margin: 10px 0;
-            padding: 12px 16px;
-            background: #f9f9fb;
-            border-radius: 8px;
-            white-space: pre-wrap;
-            font-size: 14px;
-            line-height: 1.7;
-            word-wrap: break-word;
-        }
-        .meta {
-            font-size: 13px;
-            color: #888;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px 16px;
-        }
-        .meta span { display: inline-block; }
-        .image-link {
-            display: inline-block;
-            margin-top: 10px;
-            color: #e6b980;
-            text-decoration: none;
-            font-size: 13px;
-        }
-        .image-link:hover { text-decoration: underline; }
-        .no-image { color: #ccc; font-size: 13px; margin-top: 10px; }
-        .footer {
-            text-align: center;
-            color: #ccc;
-            font-size: 12px;
-            margin-top: 24px;
-            padding-top: 16px;
-            border-top: 1px solid #eee;
-        }
-    </style>
-</head>
-<body>
-    <h1>📋 反馈列表</h1>
-    <div class="subtitle">八戒命理 · 用户反馈管理</div>
-    <div class="count">共 ''' + str(len(rows)) + ''' 条反馈</div>
-'''
         if not rows:
-            html += '<div class="card" style="text-align:center;color:#888;padding:40px 20px;">暂无反馈记录</div>'
-        else:
-            for row in rows:
-                has_image = row[6]
-                image_url = f"https://api.bajiemingli.top/feedback_image/{row[0]}?password=mmj1399094604" if has_image else None
-                
-                html += f'''
-    <div class="card">
-        <div class="card-header">
-            <span class="id">ID: {row[0]}</span>
-            <span class="type">{row[1]}</span>
-            <span class="time">{row[7]}</span>
-        </div>
-        <div class="content">{row[2]}</div>
-        <div class="meta">
-            <span>📞 联系方式: {row[3] or '未提供'}</span>
-            <span>📅 生辰: {row[4] or '未提供'}</span>
-            <span>八字: {row[5] or '未提供'}</span>
-        </div>
-'''
-                if has_image:
-                    html += f'        <a href="{image_url}" target="_blank" class="image-link">📷 查看图片</a>\n'
-                else:
-                    html += '        <div class="no-image">📷 无图片</div>\n'
-                
-                html += '    </div>\n'
+            return {"success": True, "count": 0, "data": "📋 暂无反馈记录"}
         
-        html += '''
-    <div class="footer">八戒命理 · 反馈系统</div>
-</body>
-</html>'''
+        result = "📋 反馈列表\n" + "="*50 + "\n"
+        for row in rows:
+            result += f"\nID: {row[0]}\n"
+            result += f"类型: {row[1]}\n"
+            result += f"内容: {row[2]}\n"
+            result += f"联系方式: {row[3] or '未提供'}\n"
+            result += f"生辰: {row[4] or '未提供'}\n"
+            result += f"八字: {row[5] or '未提供'}\n"
+            if row[6] == '有图片':
+                result += f"📷 图片: https://api.bajiemingli.top/feedback_image/{row[0]}?password=mmj1399094604\n"
+            else:
+                result += f"📷 图片: 无图片\n"
+            result += f"时间: {row[7]}\n"
+            result += "-"*30 + "\n"
         
-        return HTMLResponse(content=html, media_type="text/html")
+        return {"success": True, "count": len(rows), "data": result}
     except Exception as e:
-        return HTMLResponse(content=f"<h2>❌ 错误</h2><p>{str(e)}</p>", status_code=500)
+        return {"success": False, "error": str(e)}
 
 # ================== 查看反馈图片（密码保护） ==================
 @app.get("/feedback_image/{feedback_id}")
@@ -1024,11 +916,5 @@ def get_feedback_image(feedback_id: int, password: str = ""):
 if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("PORT", 8000))
-    
-    print("="*50)
-    print("🚀 八戒命理 API 服务启动中...")
-    print("="*50)
-    print(f"🌐 监听端口: {port}")
-    print("="*50)
-    
+    print(f"启动服务，端口: {port}")
     uvicorn.run(app, host="0.0.0.0", port=port)
