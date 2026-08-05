@@ -864,10 +864,11 @@ def options_verify_adjust():
 def options_feedback():
     return {"message": "OK"}
 
-@app.post("/analyze")
-def analyze(request: BaziRequest):
+# ===== 分析处理函数 =====
+def analyze_handler(birth: str, module: str):
+    """实际的分析逻辑"""
     try:
-        parsed = parse_birth_and_gender(request.birth)
+        parsed = parse_birth_and_gender(birth)
         if not parsed:
             return {"success": False, "error": "无法解析生辰，格式如：2001.10.30 18时 男"}
         
@@ -877,15 +878,24 @@ def analyze(request: BaziRequest):
         current_year = datetime.now().year
         liunian = get_liunian_ganzhi(current_year)
         
-        # ===== 计算大运信息（传入出生年月日时） =====
         da_yun_data = get_da_yun(bazi, gender, year, month, day, hour)
         
-        prompt = get_prompt(bazi_str, bazi['性别'], has_hour, request.module, current_year, liunian, da_yun_data)
+        prompt = get_prompt(bazi_str, bazi['性别'], has_hour, module, current_year, liunian, da_yun_data)
         content = call_ai(prompt)
         
         return {"success": True, "data": {"bazi": bazi_str, "analysis": content}}
     except Exception as e:
         return {"success": False, "error": str(e)}
+
+@app.post("/analyze")
+def analyze_post(request: BaziRequest):
+    """POST 方式分析（前端正常调用）"""
+    return analyze_handler(request.birth, request.module)
+
+@app.get("/analyze")
+def analyze_get(birth: str, module: str = "all"):
+    """GET 方式分析（仅供 Railway 健康检查使用，前端不要用）"""
+    return analyze_handler(birth, module)
 
 @app.post("/verify")
 def verify(request: BaziRequest):
