@@ -893,8 +893,13 @@ def analyze_post(request: BaziRequest):
     return analyze_handler(request.birth, request.module)
 
 @app.get("/analyze")
-def analyze_get(birth: str, module: str = "all"):
-    """GET 方式分析（仅供 Railway 健康检查使用，前端不要用）"""
+def analyze_get(birth: str = "", module: str = "all"):
+    """GET 方式访问 /analyze - 支持 Railway 健康检查"""
+    # 如果没有 birth 参数，说明是 Railway 健康检查，直接返回成功
+    if not birth or not birth.strip():
+        return {"status": "ok", "message": "health check"}
+    
+    # 如果有 birth 参数，执行正常分析
     return analyze_handler(birth, module)
 
 @app.post("/verify")
