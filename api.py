@@ -8,6 +8,7 @@ import re
 import math
 import sqlite3
 import base64
+import time
 from datetime import datetime
 from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -229,12 +230,11 @@ def format_da_yun_info(da_yun_data):
         result += f"下一步大运：{next_dy['干支']}（{next_dy['年龄范围']}）\n"
     return result
 
-# ================== 极简提示词（带思考模式控制） ==================
+# ================== 极简提示词 ==================
 def get_prompt(bazi_str, gender, has_hour, module, year, liunian, da_yun_data=None):
     hour_warning = get_hour_warning(has_hour)
     da_yun_info = format_da_yun_info(da_yun_data) if da_yun_data else ""
     
-    # 极简提示词
     if module == 'overview':
         prompt = f"八字{bazi_str}，性别{gender}{hour_warning}。{da_yun_info}请综合分析：日主强弱、五行喜忌、格局、事业、感情、健康。每项一句话，总共不超过200字。"
     elif module == 'career':
@@ -318,7 +318,7 @@ def call_ai(prompt):
             messages=[{"role": "user", "content": prompt}],
             max_tokens=500,
             stream=False,
-            extra_body={"thinking": {"type": "disabled"}}  # 关闭思考模式，加快响应
+            extra_body={"thinking": {"type": "disabled"}}
         )
         return response.choices[0].message.content
     except Exception as e:
@@ -331,6 +331,37 @@ def root():
 @app.get("/health")
 def health():
     return {"status": "ok", "version": "1.0.0"}
+
+@app.get("/test_deepseek")
+def test_deepseek():
+    """测试 DeepSeek API 连通性"""
+    api_key = os.environ.get("DEEPSEEK_API_KEY")
+    if not api_key:
+        return {"error": "API Key 未配置"}
+    
+    try:
+        client = OpenAI(
+            api_key=api_key,
+            base_url="https://api.deepseek.com",
+            timeout=10
+        )
+        
+        start = time.time()
+        response = client.chat.completions.create(
+            model="deepseek-v4-flash",
+            messages=[{"role": "user", "content": "Hi"}],
+            max_tokens=20,
+            extra_body={"thinking": {"type": "disabled"}}
+        )
+        elapsed = time.time() - start
+        
+        return {
+            "success": True,
+            "elapsed": elapsed,
+            "response": response.choices[0].message.content
+        }
+    except Exception as e:
+        return {"error": str(e)}
 
 @app.options("/analyze")
 def options_analyze():
