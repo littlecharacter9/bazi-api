@@ -229,12 +229,12 @@ def format_da_yun_info(da_yun_data):
         result += f"下一步大运：{next_dy['干支']}（{next_dy['年龄范围']}）\n"
     return result
 
-# ================== 极简提示词 ==================
+# ================== 极简提示词（带思考模式控制） ==================
 def get_prompt(bazi_str, gender, has_hour, module, year, liunian, da_yun_data=None):
     hour_warning = get_hour_warning(has_hour)
     da_yun_info = format_da_yun_info(da_yun_data) if da_yun_data else ""
     
-    # 极简提示词，强制 AI 快速响应
+    # 极简提示词
     if module == 'overview':
         prompt = f"八字{bazi_str}，性别{gender}{hour_warning}。{da_yun_info}请综合分析：日主强弱、五行喜忌、格局、事业、感情、健康。每项一句话，总共不超过200字。"
     elif module == 'career':
@@ -316,8 +316,9 @@ def call_ai(prompt):
         response = client.chat.completions.create(
             model="deepseek-v4-flash",
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=500,  # 限制输出长度
-            stream=False
+            max_tokens=500,
+            stream=False,
+            extra_body={"thinking": {"type": "disabled"}}  # 关闭思考模式，加快响应
         )
         return response.choices[0].message.content
     except Exception as e:
