@@ -379,25 +379,40 @@ def options_verify_adjust():
 def options_feedback():
     return {"message": "OK"}
 
+# ================== 带日志的分析处理函数 ==================
 def analyze_handler(birth: str, module: str):
     try:
+        print(f"1. 开始解析生辰: {birth}")
         parsed = parse_birth_and_gender(birth)
         if not parsed:
-            return {"success": False, "error": "无法解析生辰，格式如：2001.10.30 18时 男"}
+            return {"success": False, "error": "无法解析生辰"}
         
         year, month, day, hour, gender, has_hour = parsed
+        print(f"2. 解析完成: {year}-{month}-{day} {hour}时")
+        
+        print("3. 开始排八字...")
         bazi = get_bazi(year, month, day, hour, gender)
         bazi_str = f"{bazi['年柱']} {bazi['月柱']} {bazi['日柱']} {bazi['时柱']}"
+        print(f"4. 八字: {bazi_str}")
+        
         current_year = datetime.now().year
         liunian = get_liunian_ganzhi(current_year)
         
+        print("5. 开始计算大运...")
         da_yun_data = get_da_yun(bazi, gender, year, month, day, hour)
+        print("6. 大运计算完成")
         
+        print("7. 生成提示词...")
         prompt = get_prompt(bazi_str, bazi['性别'], has_hour, module, current_year, liunian, da_yun_data)
+        print(f"8. 提示词长度: {len(prompt)} 字符")
+        
+        print("9. 调用 AI...")
         content = call_ai(prompt)
+        print("10. AI 返回完成")
         
         return {"success": True, "data": {"bazi": bazi_str, "analysis": content}}
     except Exception as e:
+        print(f"❌ 错误: {e}")
         return {"success": False, "error": str(e)}
 
 @app.post("/analyze")
