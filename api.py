@@ -318,7 +318,7 @@ def call_ai(prompt):
             messages=[{"role": "user", "content": prompt}],
             max_tokens=500,
             stream=False,
-            extra_body={"thinking": {"type": "disabled"}}
+            extra_body={"thinking": {"type": "disabled"}}  # 关闭思考模式，保证响应速度
         )
         return response.choices[0].message.content
     except Exception as e:
@@ -379,7 +379,6 @@ def options_verify_adjust():
 def options_feedback():
     return {"message": "OK"}
 
-# ================== 带日志的分析处理函数 ==================
 def analyze_handler(birth: str, module: str):
     try:
         print(f"1. 开始解析生辰: {birth}")
